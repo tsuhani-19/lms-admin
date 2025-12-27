@@ -1,0 +1,18 @@
+{
+  "title": "User Management",
+  "subtitle": "Manage employees, roles, and access permissions",
+  "addUser": "Add User",
+  "searchUsers": "Search users...",
+  "name": "Name",
+  "email": "Email",
+  "role": "Role",
+  "department": "Department",
+  "status": "Status",
+  "actions": "Actions",
+  "view": "View",
+  "edit": "Edit",
+  "deactivate": "Deactivate",
+  "active": "Active",
+  "inactive": "Inactive"
+}
+

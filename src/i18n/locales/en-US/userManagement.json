@@ -1,0 +1,23 @@
+{
+  "title": "User Management",
+  "subtitle": "Manage employees, roles, and access permissions",
+  "addUser": "Add User",
+  "searchUsers": "Search users...",
+  "filterByRole": "Filter by Role",
+  "filterByDepartment": "Filter by Department",
+  "clearFilters": "Clear Filters",
+  "exportData": "Export Data",
+  "name": "Name",
+  "email": "Email",
+  "role": "Role",
+  "department": "Department",
+  "status": "Status",
+  "actions": "Actions",
+  "edit": "Edit",
+  "delete": "Delete",
+  "viewDetails": "View Details",
+  "active": "Active",
+  "inactive": "Inactive",
+  "pending": "Pending"
+}
+

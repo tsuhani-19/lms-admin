@@ -1,0 +1,31 @@
+
+{
+  "save": "Speichern",
+  "cancel": "Abbrechen",
+  "edit": "Bearbeiten",
+  "delete": "Löschen",
+  "loading": "Wird geladen...",
+  "success": "Änderungen erfolgreich gespeichert!",
+  "error": "Ein Fehler ist aufgetreten",
+  "confirm": "Bestätigen",
+  "close": "Schließen",
+  "back": "Zurück",
+  "next": "Weiter",
+  "previous": "Vorherige",
+  "search": "Suchen",
+  "filter": "Filtern",
+  "clear": "Löschen",
+  "submit": "Absenden",
+  "reset": "Zurücksetzen",
+  "actions": "Aktionen",
+  "status": "Status",
+  "date": "Datum",
+  "name": "Name",
+  "email": "E-Mail",
+  "password": "Passwort",
+  "show": "Anzeigen",
+  "hide": "Ausblenden",
+  "yes": "Ja",
+  "no": "Nein"
+}
+

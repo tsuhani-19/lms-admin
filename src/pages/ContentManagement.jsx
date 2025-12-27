@@ -1,766 +1,1156 @@
-import React, { useState, useEffect } from "react";
-import { FiTrash2, FiEdit2, FiVideo, FiPlus, FiX } from "react-icons/fi";
-import AdminAPI from "../services/api";
+import React, { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { FiPlus, FiChevronRight, FiVideo, FiEdit2, FiTrash2, FiChevronDown, FiFileText, FiUpload, FiX, FiArrowLeft, FiMoreVertical } from 'react-icons/fi';
 
 export default function ContentManagement() {
-  const [sections, setSections] = useState([]);
-  const [topics, setTopics] = useState([]);
-  const [sectionTopicCounts, setSectionTopicCounts] = useState({});
-  const [activeSectionId, setActiveSectionId] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [topicsLoading, setTopicsLoading] = useState(false);
-
-  const [showSectionForm, setShowSectionForm] = useState(false);
-  const [sectionFormData, setSectionFormData] = useState({
-    title: "",
-    description: "",
-    order: "",
+  const { t } = useTranslation(['content', 'common']);
+  const [selectedSection, setSelectedSection] = useState('Vision & Mission');
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [documentTitle, setDocumentTitle] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const fileInputRef = useRef(null);
+  
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [selectedVideoSection, setSelectedVideoSection] = useState('');
+  const [selectedVideoFile, setSelectedVideoFile] = useState(null);
+  const [showSectionDropdown, setShowSectionDropdown] = useState(false);
+  const videoInputRef = useRef(null);
+  
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [quizData, setQuizData] = useState({
+    topicName: '',
+    question: '',
+    questionType: 'Multiple Questions',
+    options: ['', '', '', ''],
+    correctAnswer: null,
   });
-  const [editingSection, setEditingSection] = useState(null);
-
-  const [showTopicForm, setShowTopicForm] = useState(false);
-  const [topicFormData, setTopicFormData] = useState({
-    title: "",
-    videoUrl: "",
-    locked: false,
+  const [showQuestionTypeDropdown, setShowQuestionTypeDropdown] = useState(false);
+  
+  const [showAddSectionModal, setShowAddSectionModal] = useState(false);
+  const [sectionName, setSectionName] = useState('');
+  const [sectionDescription, setSectionDescription] = useState('');
+  
+  const [showTopicDetails, setShowTopicDetails] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState(null);
+  
+  const [showManageVideoModal, setShowManageVideoModal] = useState(false);
+  const [showEditQuizModal, setShowEditQuizModal] = useState(false);
+  const [selectedTopicForAction, setSelectedTopicForAction] = useState(null);
+  
+  // Quiz Assessment data
+  const [quizAssessment, setQuizAssessment] = useState({
+    questions: 5,
+    passingScore: 80,
+    attempts: 3,
+    timeLimit: 20,
   });
-  const [editingTopic, setEditingTopic] = useState(null);
+  
+  // Completion Rules data
+  const [completionRules, setCompletionRules] = useState({
+    prerequisites: 'No prerequisites',
+    lockUntilPrerequisitesMet: true,
+  });
+  
+  // Quiz form data for topic details page
+  const [topicQuizData, setTopicQuizData] = useState({
+    section: '',
+    question: '',
+    options: ['', '', '', ''],
+    correctAnswer: null,
+  });
+  
+  // Visibility & Access data
+  const [visibilityData, setVisibilityData] = useState({
+    audience: 'All Users',
+    departments: {
+      Engineering: true,
+      Sales: true,
+      Marketing: true,
+      HR: true,
+    },
+  });
 
-  const [topicsWithQuiz, setTopicsWithQuiz] = useState({});
+  // Sample data for training sections
+  const trainingSections = [
+    { name: 'Vision & Mission', topics: 5 },
+    { name: 'Company Culture', topics: 5 },
+    { name: 'Rules & Policies', topics: 5 },
+    { name: 'Job Basics', topics: 5 },
+    { name: 'Tools & Software', topics: 5 },
+    { name: 'Security Training', topics: 5 },
+  ];
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  // Sample data for topics based on selected section
+  const topicsData = {
+    'Vision & Mission': [
+      { name: 'Our Company Story' },
+      { name: 'Mission Statement Deep Dive' },
+      { name: 'Core Values Workshop' },
+      { name: 'Vision for the Future' },
+      { name: 'Company Overview Quiz' },
+    ],
+    'Company Culture': [
+      { name: 'Culture Introduction' },
+      { name: 'Team Values' },
+      { name: 'Work Environment' },
+      { name: 'Communication Style' },
+      { name: 'Culture Quiz' },
+    ],
+    'Rules & Policies': [
+      { name: 'Company Policies' },
+      { name: 'Code of Conduct' },
+      { name: 'HR Policies' },
+      { name: 'Safety Rules' },
+      { name: 'Policies Quiz' },
+    ],
+    'Job Basics': [
+      { name: 'Job Introduction' },
+      { name: 'Role Responsibilities' },
+      { name: 'Daily Workflow' },
+      { name: 'Performance Expectations' },
+      { name: 'Job Basics Quiz' },
+    ],
+    'Tools & Software': [
+      { name: 'Tool Overview' },
+      { name: 'Software Setup' },
+      { name: 'Tool Usage Guide' },
+      { name: 'Best Practices' },
+      { name: 'Tools Quiz' },
+    ],
+    'Security Training': [
+      { name: 'Security Basics' },
+      { name: 'Data Protection' },
+      { name: 'Password Policies' },
+      { name: 'Security Protocols' },
+      { name: 'Security Quiz' },
+    ],
+  };
 
-  useEffect(() => {
-    fetchSections();
-  }, []);
+  const currentTopics = topicsData[selectedSection] || [];
 
-  useEffect(() => {
-    if (activeSectionId) {
-      fetchTopics(activeSectionId);
-    }
-  }, [activeSectionId]);
+  // Function to close all modals
+  const closeAllModals = () => {
+    setShowDocumentModal(false);
+    setShowVideoModal(false);
+    setShowQuizModal(false);
+    setShowAddSectionModal(false);
+    setShowManageVideoModal(false);
+    setShowEditQuizModal(false);
+    setShowSectionDropdown(false);
+    setShowQuestionTypeDropdown(false);
+  };
 
-  const fetchSections = async () => {
-    try {
-      setLoading(true);
-      const response = await AdminAPI.getAllSections();
-      if (response.success && response.data) {
-        const sortedSections = response.data.sort((a, b) => a.order - b.order);
-        setSections(sortedSections);
-
-        const counts = {};
-        await Promise.all(
-          sortedSections.map(async (section) => {
-            try {
-              const topicsResponse = await AdminAPI.getAllTopics(section.id);
-              counts[section.id] = topicsResponse.success
-                ? topicsResponse.data.length
-                : 0;
-            } catch {
-              counts[section.id] = 0;
-            }
-          })
-        );
-        setSectionTopicCounts(counts);
-
-        if (sortedSections.length > 0 && !activeSectionId) {
-          setActiveSectionId(sortedSections[0].id);
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching sections:", err);
-      setError(err.message || "Failed to fetch sections");
-    } finally {
-      setLoading(false);
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedFile(file);
     }
   };
 
-  const fetchTopics = async (sectionId) => {
-    if (!sectionId) {
-      setTopics([]);
-      setTopicsWithQuiz({});
-      return;
-    }
-
-    try {
-      setTopicsLoading(true);
-      const response = await AdminAPI.getAllTopics(sectionId);
-      if (response.success && response.data) {
-        setTopics(response.data);
-
-        setSectionTopicCounts((prev) => ({
-          ...prev,
-          [sectionId]: response.data.length,
-        }));
-
-        const quizChecks = {};
-        await Promise.all(
-          response.data.map(async (topic) => {
-            try {
-              const quiz = await AdminAPI.checkTopicHasQuiz(topic.id);
-              quizChecks[topic.id] = !!quiz;
-            } catch {
-              quizChecks[topic.id] = false;
-            }
-          })
-        );
-        setTopicsWithQuiz(quizChecks);
-      }
-    } catch (err) {
-      console.error("Error fetching topics:", err);
-      setError(err.message || "Failed to fetch topics");
-      setTopics([]);
-    } finally {
-      setTopicsLoading(false);
-    }
-  };
-
-  const handleSectionSubmit = async (e) => {
+  const handleDragOver = (e) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
-    setSubmitting(true);
-
-    try {
-      if (editingSection) {
-        await AdminAPI.updateSection(editingSection.id, sectionFormData);
-        setSuccess("Section updated successfully!");
-      } else {
-        await AdminAPI.createSection(
-          sectionFormData.title,
-          sectionFormData.description,
-          parseInt(sectionFormData.order)
-        );
-        setSuccess("Section created successfully!");
-      }
-
-      setSectionFormData({ title: "", description: "", order: "" });
-      setEditingSection(null);
-      setTimeout(() => {
-        setShowSectionForm(false);
-        setSuccess("");
-        fetchSections();
-      }, 1200);
-    } catch (err) {
-      setError(err.message || "Failed to save section");
-    } finally {
-      setSubmitting(false);
-    }
+    e.stopPropagation();
   };
 
-  const handleTopicSubmit = async (e) => {
+  const handleDrop = (e) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
-    setSubmitting(true);
-
-    if (!activeSectionId) {
-      setError("Please select a section first");
-      setSubmitting(false);
-      return;
-    }
-
-    try {
-      if (editingTopic) {
-        await AdminAPI.updateTopic(editingTopic.id, topicFormData);
-        setSuccess("Topic updated successfully!");
-      } else {
-        await AdminAPI.createTopic(
-          activeSectionId,
-          topicFormData.title,
-          topicFormData.videoUrl || null,
-          topicFormData.locked
-        );
-        setSuccess("Topic created successfully!");
-      }
-
-      setTopicFormData({ title: "", videoUrl: "", locked: false });
-      setEditingTopic(null);
-      setTimeout(() => {
-        setShowTopicForm(false);
-        setSuccess("");
-        fetchTopics(activeSectionId);
-        fetchSections();
-      }, 1200);
-    } catch (err) {
-      setError(err.message || "Failed to save topic");
-    } finally {
-      setSubmitting(false);
+    e.stopPropagation();
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      setSelectedFile(file);
     }
   };
 
-  const handleDeleteSection = async (id) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this section? All topics in this section will also be deleted."
-      )
-    ) {
-      return;
-    }
+  const handleBrowseClick = () => {
+    fileInputRef.current?.click();
+  };
 
-    try {
-      await AdminAPI.deleteSection(id);
-      setSuccess("Section deleted successfully!");
+  const handleUploadDocument = () => {
+    // Handle document upload logic here
+    console.log('Uploading document:', { documentTitle, selectedFile });
+    // Close modal and reset form
+    setShowDocumentModal(false);
+    setDocumentTitle('');
+    setSelectedFile(null);
+  };
 
-      if (activeSectionId === id) {
-        const remainingSections = sections.filter((s) => s.id !== id);
-        setActiveSectionId(
-          remainingSections.length > 0 ? remainingSections[0].id : null
-        );
-      }
-
-      setTimeout(() => {
-        setSuccess("");
-        fetchSections();
-      }, 1200);
-    } catch (err) {
-      setError(err.message || "Failed to delete section");
+  const handleVideoSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedVideoFile(file);
     }
   };
 
-  const handleDeleteTopic = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this topic?")) {
-      return;
-    }
+  const handleVideoDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
-    try {
-      await AdminAPI.deleteTopic(id);
-      setSuccess("Topic deleted successfully!");
-      setTimeout(() => {
-        setSuccess("");
-        fetchTopics(activeSectionId);
-        fetchSections();
-      }, 1200);
-    } catch (err) {
-      setError(err.message || "Failed to delete topic");
+  const handleVideoDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      setSelectedVideoFile(file);
     }
   };
 
-  const handleEditSection = (section) => {
-    setEditingSection(section);
-    setSectionFormData({
-      title: section.title,
-      description: section.description || "",
-      order: section.order.toString(),
+  const handleVideoBrowseClick = () => {
+    videoInputRef.current?.click();
+  };
+
+  const handleUploadVideo = () => {
+    // Handle video upload logic here
+    console.log('Uploading video:', { selectedVideoSection, selectedVideoFile });
+    // Close modal and reset form
+    setShowVideoModal(false);
+    setSelectedVideoSection('');
+    setSelectedVideoFile(null);
+  };
+
+  const handleQuizOptionChange = (index, value) => {
+    const newOptions = [...quizData.options];
+    newOptions[index] = value;
+    setQuizData({ ...quizData, options: newOptions });
+  };
+
+  const handleSaveQuiz = () => {
+    // Handle quiz save logic here
+    console.log('Saving quiz:', quizData);
+    // Close modal and reset form
+    setShowQuizModal(false);
+    setQuizData({
+      topicName: '',
+      question: '',
+      questionType: 'Multiple Questions',
+      options: ['', '', '', ''],
+      correctAnswer: null,
     });
-    setShowSectionForm(true);
   };
 
-  const handleEditTopic = (topic) => {
-    setEditingTopic(topic);
-    setTopicFormData({
-      title: topic.title,
-      videoUrl: topic.videoUrl || "",
-      locked: topic.locked || false,
-    });
-    setShowTopicForm(true);
+  const handleCreateSection = () => {
+    // Handle section creation logic here
+    console.log('Creating section:', { sectionName, sectionDescription });
+    // Close modal and reset form
+    setShowAddSectionModal(false);
+    setSectionName('');
+    setSectionDescription('');
   };
 
-  const handleCloseSectionForm = () => {
-    setShowSectionForm(false);
-    setEditingSection(null);
-    setSectionFormData({ title: "", description: "", order: "" });
-    setError("");
-    setSuccess("");
-  };
-
-  const handleCloseTopicForm = () => {
-    setShowTopicForm(false);
-    setEditingTopic(null);
-    setTopicFormData({ title: "", videoUrl: "", locked: false });
-    setError("");
-    setSuccess("");
-  };
-
-  const activeSection = sections.find((s) => s.id === activeSectionId);
-
-  return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 via-white to-slate-100 flex flex-col">
-      {/* Main Container */}
-      <div className="max-w-6xl mx-auto w-full flex flex-col flex-1 ">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 flex-shrink-0">
-          <div className="flex flex-col">
-        
-            <h1 className="text-3xl text-[#3E0288] font-semibold  mt-1">
-              Content Management
-            </h1>
-            <p className="text-[#3E0288] text-sm mt-2 max-w-lg">
-              Organize onboarding <span className="font-medium">sections</span>, topics, and quizzes in one place.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 sm:gap-3 mt-1 md:mt-0">
-            <button
-              onClick={() => {
-                setEditingSection(null);
-                setSectionFormData({
-                  title: "",
-                  description: "",
-                  order: (sections.length + 1).toString(),
-                });
-                setShowSectionForm(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#3E0288] px-4 py-2.5 text-sm font-medium text-white "
-            >
-              <FiPlus className="w-4 h-4" />
-              <span>New Section</span>
-            </button>
+  // If showing topic details, render that view
+  if (showTopicDetails) {
+    return (
+      <div className="w-full bg-white min-h-screen">
+        {/* Header Section */}
+        <div className="bg-white px-6 py-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <button
+                onClick={() => setShowTopicDetails(false)}
+                className="flex items-center gap-2 text-gray-600 hover:text-[#3E0288] transition text-sm mb-2"
+              >
+                <FiArrowLeft size={16} />
+                <span>{t('content:backToContent')}</span>
+              </button>
+              <h1 className="text-[#3E0288] text-3xl font-semibold mb-2" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+                {t('content:title')}
+              </h1>
+              <p className="text-[#3E0288] text-base font-medium opacity-70" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+                {t('content:subtitle')}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Language Selector */}
+              <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                <span className="text-sm font-semibold">Eng (US)</span>
+                <span className="text-lg">🇺🇸</span>
+                <FiChevronDown className="text-gray-400" size={14} />
+              </div>
+              {/* Profile Picture */}
+              <div className="w-10 h-10 rounded-full bg-[#3E0288] flex items-center justify-center text-white font-semibold">
+                U
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Status messages */}
-        {(success || error) && (
-          <div className="mb-4 space-y-2">
-            {success && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 shadow-sm">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span>{success}</span>
+        {/* Two Column Layout */}
+        <div className="px-6 mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Column */}
+          <div className="space-y-6">
+            {/* Quiz Assessment Panel */}
+            <div className="bg-gray-50 rounded-xl p-4 shadow-sm">
+              <h2 className="text-[#3E0288] text-lg font-bold mb-4">Quiz Assessment</h2>
+              <div className="space-y-3 mb-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-700">Questions</span>
+                  <span className="text-sm font-semibold text-gray-800">{quizAssessment.questions} questions</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-700">Passing Score</span>
+                  <span className="text-sm font-semibold text-gray-800">{quizAssessment.passingScore}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-700">Attempts</span>
+                  <span className="text-sm font-semibold text-gray-800">{quizAssessment.attempts}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-700">Time Limit</span>
+                  <span className="text-sm font-semibold text-gray-800">{quizAssessment.timeLimit} mins</span>
+                </div>
               </div>
-            )}
-            {error && (
-              <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 shadow-sm">
-                <span className="h-2 w-2 rounded-full bg-rose-500" />
-                <span>{error}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Main content */}
-        <div className="flex flex-1 min-h-0 gap-5">
-          {/* Left sidebar */}
-          <div className="w-full md:w-1/3 lg:w-1/4 bg-white/80 backdrop-blur border border-slate-200 rounded-2xl p-4 flex flex-col shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
-                Training Sections
-              </h2>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                {sections.length} total
-              </span>
+              <button className="w-full py-2 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition text-sm font-semibold">
+                Edit
+              </button>
             </div>
 
-            <div className="flex-1 overflow-auto space-y-2 pr-1">
-              {loading ? (
-                <div className="py-6 text-center text-xs text-slate-400">
-                  Loading sections...
+            {/* Completion Rules Panel */}
+            <div className="bg-gray-50 rounded-xl p-4 shadow-sm">
+              <h2 className="text-[#3E0288] text-lg font-bold mb-4">Completion Rules</h2>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-700 mb-2">Completion Flow</p>
+                  <p className="text-sm font-semibold text-gray-800">Watch Video → Complete Quiz → Next Topic</p>
                 </div>
-              ) : sections.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-400">
-                  No sections yet. Create the first one.
-                </div>
-              ) : (
-                sections.map((section) => (
-                  <div
-                    key={section.id}
-                    className={`group relative flex items-center rounded-xl border px-3 py-3 text-sm transition ${
-                      activeSectionId === section.id
-                        ? "border-violet-200 bg-violet-50/80 shadow-sm"
-                        : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-2">Prerequisites</label>
+                  <div className="relative">
                     <button
-                      onClick={() => setActiveSectionId(section.id)}
-                      className="flex flex-1 items-center justify-between text-left"
+                      onClick={() => setShowSectionDropdown(!showSectionDropdown)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm flex items-center justify-between bg-white"
                     >
-                      <div className="flex flex-col">
-                        <span className="font-medium text-slate-800">
-                          {section.title}
-                        </span>
-                        <span className="text-[11px] text-slate-500 mt-0.5">
-                          {sectionTopicCounts[section.id] || 0} topic
-                          {sectionTopicCounts[section.id] !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                      <span className="text-slate-300 group-hover:text-slate-400 text-base">
-                        ›
-                      </span>
+                      <span className="text-gray-800">{completionRules.prerequisites}</span>
+                      <FiChevronDown className="text-gray-400" size={18} />
                     </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-800">Lock Until Prerequisites Met</span>
+                  <button
+                    onClick={() => setCompletionRules({ ...completionRules, lockUntilPrerequisitesMet: !completionRules.lockUntilPrerequisitesMet })}
+                    className={`relative w-12 h-6 rounded-full transition ${completionRules.lockUntilPrerequisitesMet ? 'bg-[#3E0288]' : 'bg-gray-300'}`}
+                  >
+                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition ${completionRules.lockUntilPrerequisitesMet ? 'translate-x-6' : ''}`}></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
-                    <div className="ml-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditSection(section);
+          {/* Right Column */}
+          <div className="space-y-6">
+            {/* Add Quiz Panel */}
+            <div className="bg-gray-50 rounded-xl p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-[#3E0288] text-lg font-bold">Add Quiz</h2>
+                <button className="flex items-center gap-2 px-3 py-1 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition text-sm font-semibold">
+                  <FiPlus size={14} />
+                  more question
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {/* Section Selector */}
+                <div className="flex items-center gap-2">
+                  <FiMoreVertical className="text-gray-400 cursor-move" size={18} />
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() => setShowSectionDropdown(!showSectionDropdown)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm flex items-center justify-between bg-white"
+                    >
+                      <span className={topicQuizData.section ? 'text-gray-800' : 'text-gray-400'}>
+                        {topicQuizData.section || 'Select Section'}
+                      </span>
+                      <FiChevronDown className="text-gray-400" size={18} />
+                    </button>
+                  </div>
+                  <button className="text-red-500 hover:opacity-80 transition">
+                    <FiTrash2 size={18} />
+                  </button>
+                </div>
+
+                {/* Question Input */}
+                <div>
+                  <input
+                    type="text"
+                    value={topicQuizData.question}
+                    onChange={(e) => setTopicQuizData({ ...topicQuizData, question: e.target.value })}
+                    placeholder="Enter Your Question"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+                  />
+                </div>
+
+                {/* Multiple Choice Options */}
+                <div className="space-y-3">
+                  {topicQuizData.options.map((option, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="topicCorrectAnswer"
+                        checked={topicQuizData.correctAnswer === index}
+                        onChange={() => setTopicQuizData({ ...topicQuizData, correctAnswer: index })}
+                        className="w-4 h-4 text-[#3E0288] focus:ring-[#3E0288]"
+                      />
+                      <input
+                        type="text"
+                        value={option}
+                        onChange={(e) => {
+                          const newOptions = [...topicQuizData.options];
+                          newOptions[index] = e.target.value;
+                          setTopicQuizData({ ...topicQuizData, options: newOptions });
                         }}
-                        className="rounded-md p-1 text-slate-400 hover:text-violet-600 hover:bg-violet-50"
-                      >
-                        <FiEdit2 className="w-3.5 h-3.5" />
+                        placeholder={`Option ${index + 1}`}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <button className="flex-1 py-2 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-semibold">
+                    Save Quiz
+                  </button>
+                  <button 
+                    onClick={() => setShowTopicDetails(false)}
+                    className="flex-1 py-2 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition text-sm font-semibold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Visibility & Access Panel */}
+            <div className="bg-gray-50 rounded-xl p-4 shadow-sm">
+              <h2 className="text-[#3E0288] text-lg font-bold mb-4">Visibility & Access</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-2">Audience</label>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowSectionDropdown(!showSectionDropdown)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm flex items-center justify-between bg-white"
+                    >
+                      <span className="text-gray-800">{visibilityData.audience}</span>
+                      <FiChevronDown className="text-gray-400" size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-2">Departments (if applicable)</label>
+                  <div className="space-y-2">
+                    {Object.keys(visibilityData.departments).map((dept) => (
+                      <label key={dept} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={visibilityData.departments[dept]}
+                          onChange={(e) => {
+                            setVisibilityData({
+                              ...visibilityData,
+                              departments: {
+                                ...visibilityData.departments,
+                                [dept]: e.target.checked,
+                              },
+                            });
+                          }}
+                          className="w-4 h-4 text-[#3E0288] focus:ring-[#3E0288] rounded"
+                        />
+                        <span className="text-sm text-gray-700">{dept}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Action Buttons */}
+        <div className="px-6 pb-6">
+          <div className="flex gap-3 max-w-2xl">
+            <button className="flex-1 py-3 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-semibold">
+              Save Changes
+            </button>
+            <button 
+              onClick={() => setShowTopicDetails(false)}
+              className="flex-1 py-3 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition text-sm font-semibold"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full bg-white min-h-screen">
+      {/* Header Section */}
+      <div className="bg-white px-6 py-6 mb-6">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between">
+          <div className="mb-4 md:mb-0">
+            <h1 className="text-[#3E0288] text-3xl font-semibold mb-2" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+              {t('content:title')}
+            </h1>
+            <p className="text-[#3E0288] text-base font-medium opacity-70" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+              {t('content:subtitle')}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Language Selector */}
+            <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+              <span className="text-sm font-semibold">Eng (US)</span>
+              <span className="text-lg">🇺🇸</span>
+              <FiChevronDown className="text-gray-400" size={14} />
+            </div>
+            {/* Profile Picture */}
+            <div className="w-10 h-10 rounded-full bg-[#3E0288] flex items-center justify-center text-white font-semibold">
+              U
+            </div>
+            {/* Add New Section Button */}
+            <button 
+              onClick={() => {
+                closeAllModals();
+                setShowAddSectionModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-semibold"
+            >
+              <FiPlus size={16} />
+              {t('content:addNewSection')}
+            </button>
+          </div>
+        </div>
+            </div>
+
+      {/* Global Action Buttons */}
+      <div className="px-6 mb-6">
+        <div className="flex items-center gap-4">
+                    <button
+            onClick={() => {
+              closeAllModals();
+              setShowDocumentModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-semibold text-gray-700"
+          >
+            <FiFileText size={16} />
+            Add Document
                       </button>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteSection(section.id);
-                        }}
-                        className="rounded-md p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                      >
-                        <FiTrash2 className="w-3.5 h-3.5" />
+            onClick={() => {
+              closeAllModals();
+              setShowVideoModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-semibold text-gray-700"
+          >
+            <FiUpload size={16} />
+            Upload Video
                       </button>
                     </div>
                   </div>
-                ))
-              )}
+
+      {/* Main Content - Two Column Layout */}
+      <div className="px-6 mb-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Panel - Training Sections */}
+        <div className="bg-gray-50 rounded-xl p-4 shadow-sm">
+          <h2 className="text-[#3E0288] text-lg font-bold mb-4">Training Section</h2>
+          <div className="space-y-2">
+            {trainingSections.map((section, index) => (
+              <button
+                key={index}
+                onClick={() => setSelectedSection(section.name)}
+                className={`w-full flex items-center justify-between p-3 rounded-lg transition ${
+                  selectedSection === section.name
+                    ? 'bg-purple-100 text-[#3E0288]'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <div className="flex flex-col items-start">
+                  <span className="text-sm font-semibold">{section.name}</span>
+                  <span className="text-xs text-gray-500">{section.topics} topics</span>
+                </div>
+                <FiChevronRight className="text-gray-400" size={18} />
+              </button>
+            ))}
             </div>
           </div>
 
-          {/* Right panel */}
-          <div className="w-full md:flex-1 bg-white/90 backdrop-blur border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col shadow-sm">
-            <div className="flex items-center justify-between mb-4 flex-shrink-0">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-800">
-                  {activeSection
-                    ? `${activeSection.title} topics`
-                    : "Select a section"}
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Manage video and quiz status for each topic.
-                </p>
-              </div>
-              {activeSectionId && (
-                <button
-                  onClick={() => {
-                    setEditingTopic(null);
-                    setTopicFormData({
-                      title: "",
-                      videoUrl: "",
-                      locked: false,
-                    });
-                    setShowTopicForm(true);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 transition"
-                >
-                  <FiPlus className="w-3.5 h-3.5" />
-                  <span>New Topic</span>
-                </button>
-              )}
+        {/* Right Panel - Topics */}
+        <div className="lg:col-span-2 bg-gray-50 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[#3E0288] text-lg font-bold">{selectedSection} Topics</h2>
+            <button 
+              onClick={() => {
+                closeAllModals();
+                setShowQuizModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-semibold text-gray-700"
+            >
+              <FiPlus size={16} />
+              Add Quiz
+            </button>
             </div>
 
-            <div className="rounded-xl border border-slate-100 bg-slate-50/60 flex-1 min-h-0 overflow-hidden">
-              {!activeSectionId ? (
-                <div className="flex h-64 items-center justify-center px-4 text-center text-xs text-slate-400">
-                  Choose a section on the left to see its topics.
-                </div>
-              ) : topicsLoading ? (
-                <div className="flex h-64 items-center justify-center text-xs text-slate-400">
-                  Loading topics...
-                </div>
-              ) : topics.length === 0 ? (
-                <div className="flex h-64 items-center justify-center px-4 text-center text-xs text-slate-400">
-                  No topics in this section yet. Use &quot;New Topic&quot; to
-                  add your first topic.
-                </div>
-              ) : (
-                <div className="h-full overflow-auto">
-                  <table className="w-full text-left border-collapse text-[13px]">
-                    <thead className="bg-white sticky top-0 z-10 shadow-sm">
-                      <tr className="text-slate-500">
-                        <th className="px-4 py-3 text-xs font-semibold">
-                          Topic name
-                        </th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold">
-                          Video
-                        </th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold">
-                          Quiz
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold">
-                          Actions
-                        </th>
+          {/* Topics Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">Topic Name</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">Video</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">Quiz</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {topics.map((topic) => (
-                        <tr
-                          key={topic.id}
-                          className="bg-white/80 hover:bg-violet-50/60 transition-colors"
-                        >
-                          <td className="px-4 py-3 align-middle">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-medium text-slate-900">
-                                {topic.title}
-                              </span>
-                              {topic.locked && (
-                                <span className="mt-1 inline-flex w-max rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                                  Locked
-                                </span>
-                              )}
-                            </div>
+              <tbody>
+                {currentTopics.map((topic, index) => (
+                  <tr key={index} className="border-b border-gray-100 hover:bg-white transition">
+                    <td 
+                      className="py-3 px-4 text-xs text-gray-700 font-medium cursor-pointer hover:text-[#3E0288]"
+                      onClick={() => {
+                        setSelectedTopic(topic);
+                        setShowTopicDetails(true);
+                      }}
+                    >
+                      {topic.name}
+                    </td>
+                    <td className="py-3 px-4">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTopicForAction(topic);
+                          closeAllModals();
+                          setShowManageVideoModal(true);
+                        }}
+                        className="text-[#3E0288] hover:opacity-80 transition"
+                      >
+                        <FiVideo size={18} />
+                      </button>
                           </td>
-                          <td className="px-4 py-3 text-center align-middle">
-                            {topic.videoUrl ? (
-                              <span className="inline-flex items-center justify-center rounded-full bg-violet-50 p-1.5 text-violet-600">
-                                <FiVideo className="w-3.5 h-3.5" />
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-slate-400">
-                                No video
-                              </span>
-                            )}
+                    <td className="py-3 px-4">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTopicForAction(topic);
+                          closeAllModals();
+                          setShowEditQuizModal(true);
+                        }}
+                        className="text-blue-600 hover:opacity-80 transition"
+                      >
+                        <FiEdit2 size={18} />
+                      </button>
                           </td>
-                          <td className="px-4 py-3 text-center align-middle">
-                            {topicsWithQuiz[topic.id] ? (
-                              <span className="inline-flex items-center justify-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                                Quiz added
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-slate-400">
-                                No quiz
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 align-middle">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                onClick={() => handleEditTopic(topic)}
-                                className="inline-flex items-center rounded-md border border-transparent bg-white px-2 py-1 text-[11px] font-medium text-slate-600 shadow-sm hover:border-violet-200 hover:text-violet-700"
-                              >
-                                <FiEdit2 className="mr-1 h-3.5 w-3.5" />
-                                Edit
+                    <td className="py-3 px-4">
+                      <button className="text-red-500 hover:opacity-80 transition">
+                        <FiTrash2 size={18} />
                               </button>
-                              <button
-                                onClick={() => handleDeleteTopic(topic.id)}
-                                className="inline-flex items-center rounded-md border border-transparent bg-white px-2 py-1 text-[11px] font-medium text-rose-600 shadow-sm hover:border-rose-200 hover:bg-rose-50"
-                              >
-                                <FiTrash2 className="mr-1 h-3.5 w-3.5" />
-                                Delete
-                              </button>
-                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Section Form Sidebar */}
-      {showSectionForm && (
-        <>
-          <div
-            className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40"
-            onClick={handleCloseSectionForm}
-          ></div>
-          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 flex flex-col shadow-2xl">
-            <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 bg-slate-50">
+      {/* Add Document Modal */}
+      {showDocumentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          {/* Modal */}
+          <div 
+            className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl pointer-events-auto"
+          >
+              {/* Header */}
+              <div className="flex items-start justify-between mb-6">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {editingSection ? "Edit section" : "New section"}
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Configure the name and display order.
-                </p>
+                  <h2 className="text-[#3E0288] text-2xl font-bold mb-1">Add Document</h2>
+                  <p className="text-gray-600 text-sm">New Topic</p>
               </div>
               <button
-                onClick={handleCloseSectionForm}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  onClick={() => setShowDocumentModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition p-1"
               >
-                <FiX className="w-5 h-5" />
+                  <FiX size={24} />
               </button>
             </div>
-            <form
-              onSubmit={handleSectionSubmit}
-              className="flex-1 overflow-y-auto px-6 py-5 space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                  Title <span className="text-rose-500">*</span>
-                </label>
+
+              {/* Document Title */}
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-800 mb-2">Document Title</label>
                 <input
                   type="text"
-                  value={sectionFormData.title}
-                  onChange={(e) =>
-                    setSectionFormData({
-                      ...sectionFormData,
-                      title: e.target.value,
-                    })
-                  }
-                  required
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100"
-                  placeholder="e.g. Vision & Mission"
+                  value={documentTitle}
+                  onChange={(e) => setDocumentTitle(e.target.value)}
+                  placeholder="e.g, Employee Software Training"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                  Description
-                </label>
-                <textarea
-                  value={sectionFormData.description}
-                  onChange={(e) =>
-                    setSectionFormData({
-                      ...sectionFormData,
-                      description: e.target.value,
-                    })
-                  }
-                  rows={3}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100"
-                  placeholder="Short description for this section (optional)"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                  Order <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={sectionFormData.order}
-                  onChange={(e) =>
-                    setSectionFormData({
-                      ...sectionFormData,
-                      order: e.target.value,
-                    })
-                  }
-                  required
-                  min="1"
-                  className="w-32 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100"
-                  placeholder="1"
-                />
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Sections are sorted ascending by this value.
-                </p>
-              </div>
-              <div className="flex gap-3 pt-4 border-t border-slate-200">
+
+              {/* Document Upload Area */}
+              <div className="mb-6">
+                <div
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                  onClick={handleBrowseClick}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-[#3E0288] transition"
+                >
+                  <div className="flex flex-col items-center">
+                    <FiUpload className="text-gray-400 mb-4" size={48} />
+                    <p className="text-sm font-bold text-gray-800 mb-2">
+                      Drag and drop your document here, or click to browse
+                    </p>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Supported formats PDF, DOC, DOCX (Max 50MB)
+                    </p>
                 <button
                   type="button"
-                  onClick={handleCloseSectionForm}
-                  className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  disabled={submitting}
+                      className="px-4 py-2 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition text-sm font-semibold"
                 >
-                  Cancel
+                      Browse Files
                 </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                    {selectedFile && (
+                      <p className="mt-3 text-sm text-gray-600">{selectedFile.name}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload Button */}
                 <button
-                  type="submit"
-                  className="flex-1 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={submitting}
-                >
-                  {submitting
-                    ? editingSection
-                      ? "Updating..."
-                      : "Creating..."
-                    : editingSection
-                    ? "Update section"
-                    : "Create section"}
+                onClick={handleUploadDocument}
+                className="w-full py-3 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-bold"
+              >
+                Upload Document
                 </button>
               </div>
-            </form>
           </div>
-        </>
       )}
 
-      {/* Topic Form Sidebar */}
-      {showTopicForm && (
-        <>
-          <div
-            className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40"
-            onClick={handleCloseTopicForm}
-          ></div>
-          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 flex flex-col shadow-2xl">
-            <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 bg-slate-50">
+      {/* Upload Video Modal */}
+      {showVideoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          {/* Modal */}
+          <div 
+            className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl pointer-events-auto"
+          >
+              {/* Header */}
+              <div className="flex items-start justify-between mb-6">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {editingTopic ? "Edit topic" : "New topic"}
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Link an optional video and mark the topic as locked.
-                </p>
+                  <h2 className="text-[#3E0288] text-2xl font-bold mb-1">Upload Video</h2>
+                  <p className="text-gray-600 text-sm">First Select the section then upload the video</p>
               </div>
               <button
-                onClick={handleCloseTopicForm}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  onClick={() => setShowVideoModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition p-1"
               >
-                <FiX className="w-5 h-5" />
+                  <FiX size={24} />
               </button>
             </div>
-            <form
-              onSubmit={handleTopicSubmit}
-              className="flex-1 overflow-y-auto px-6 py-5 space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                  Title <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={topicFormData.title}
-                  onChange={(e) =>
-                    setTopicFormData({
-                      ...topicFormData,
-                      title: e.target.value,
-                    })
-                  }
-                  required
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100"
-                  placeholder="e.g. Our Company Story"
-                />
+
+              {/* Select Section Dropdown */}
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-800 mb-2">Select Section</label>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSectionDropdown(!showSectionDropdown)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm flex items-center justify-between bg-white"
+                  >
+                    <span className={selectedVideoSection ? 'text-gray-800' : 'text-gray-400'}>
+                      {selectedVideoSection || 'Select a section'}
+                    </span>
+                    <FiChevronDown className="text-gray-400" size={18} />
+                  </button>
+                  {showSectionDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                      {trainingSections.map((section, index) => (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            setSelectedVideoSection(section.name);
+                            setShowSectionDropdown(false);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-100 transition text-sm text-gray-800"
+                        >
+                          {section.name}
+                        </button>
+                      ))}
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                  Video URL
-                </label>
-                <input
-                  type="url"
-                  value={topicFormData.videoUrl}
-                  onChange={(e) =>
-                    setTopicFormData({
-                      ...topicFormData,
-                      videoUrl: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100"
-                  placeholder="https://video-link.com/..."
-                />
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Leave empty if this topic does not have a video.
-                </p>
+                  )}
               </div>
-              <div>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={topicFormData.locked}
-                    onChange={(e) =>
-                      setTopicFormData({
-                        ...topicFormData,
-                        locked: e.target.checked,
-                      })
-                    }
-                    className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                  />
-                  <span className="text-sm text-slate-700">
-                    Require completion of previous content
-                  </span>
-                </label>
               </div>
-              <div className="flex gap-3 pt-4 border-t border-slate-200">
+
+              {/* Video Upload Area */}
+              <div className="mb-6">
+                <div
+                  onDragOver={handleVideoDragOver}
+                  onDrop={handleVideoDrop}
+                  onClick={handleVideoBrowseClick}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-[#3E0288] transition"
+                >
+                  <div className="flex flex-col items-center">
+                    <FiUpload className="text-gray-400 mb-4" size={48} />
+                    <p className="text-sm font-bold text-gray-800 mb-2">
+                      Drag and drop your videos here, or click to browse
+                    </p>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Supported Formats: MP4, MOV, AVL, WebM (Max 500MB)
+                    </p>
                 <button
                   type="button"
-                  onClick={handleCloseTopicForm}
-                  className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  disabled={submitting}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-semibold"
                 >
-                  Cancel
+                      Browse Files
                 </button>
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept=".mp4,.mov,.avi,.webm"
+                      onChange={handleVideoSelect}
+                      className="hidden"
+                    />
+                    {selectedVideoFile && (
+                      <p className="mt-3 text-sm text-gray-600">{selectedVideoFile.name}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload Button */}
                 <button
-                  type="submit"
-                  className="flex-1 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={submitting}
-                >
-                  {submitting
-                    ? editingTopic
-                      ? "Updating..."
-                      : "Creating..."
-                    : editingTopic
-                    ? "Update topic"
-                    : "Create topic"}
+                onClick={handleUploadVideo}
+                className="w-full py-3 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-bold"
+              >
+                Upload Video
                 </button>
               </div>
-            </form>
           </div>
-        </>
+      )}
+
+      {/* Add Quiz Modal */}
+      {showQuizModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          {/* Modal */}
+          <div 
+            className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl pointer-events-auto"
+          >
+              {/* Header */}
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h2 className="text-[#3E0288] text-2xl font-bold mb-1">Add Quiz</h2>
+                  <p className="text-gray-600 text-sm">{selectedSection}</p>
+                </div>
+                <button
+                  onClick={() => setShowQuizModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition p-1"
+                >
+                  <FiX size={24} />
+                </button>
+              </div>
+
+              {/* Question Type and Add Question Button */}
+              <div className="flex items-center gap-3 mb-6">
+                <span className="text-sm font-semibold text-gray-700">Q1</span>
+                <div className="relative flex-1">
+                  <button
+                    onClick={() => setShowQuestionTypeDropdown(!showQuestionTypeDropdown)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm flex items-center justify-between bg-white"
+                  >
+                    <span className="text-gray-800">{quizData.questionType}</span>
+                    <FiChevronDown className="text-gray-400" size={18} />
+                  </button>
+                  {showQuestionTypeDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
+                      <button
+                        onClick={() => {
+                          setQuizData({ ...quizData, questionType: 'Multiple Questions' });
+                          setShowQuestionTypeDropdown(false);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 transition text-sm text-gray-800"
+                      >
+                        Multiple Questions
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button className="p-2 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition">
+                  <FiPlus size={20} />
+                </button>
+              </div>
+
+              {/* Topic Name Input */}
+              <div className="mb-4">
+                <input
+                  type="text"
+                  value={quizData.topicName}
+                  onChange={(e) => setQuizData({ ...quizData, topicName: e.target.value })}
+                  placeholder="Enter Your Topic Name"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+                />
+              </div>
+
+              {/* Question Input */}
+              <div className="mb-6">
+                <input
+                  type="text"
+                  value={quizData.question}
+                  onChange={(e) => setQuizData({ ...quizData, question: e.target.value })}
+                  placeholder="Enter Your Question"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+                />
+              </div>
+
+              {/* Multiple Choice Options */}
+              <div className="mb-6 space-y-3">
+                {quizData.options.map((option, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="correctAnswer"
+                      checked={quizData.correctAnswer === index}
+                      onChange={() => setQuizData({ ...quizData, correctAnswer: index })}
+                      className="w-4 h-4 text-[#3E0288] focus:ring-[#3E0288]"
+                    />
+                    <input
+                      type="text"
+                      value={option}
+                      onChange={(e) => handleQuizOptionChange(index, e.target.value)}
+                      placeholder={`Option ${index + 1}`}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Save Button */}
+              <button
+                onClick={handleSaveQuiz}
+                className="w-full py-3 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-bold"
+              >
+                Save
+              </button>
+            </div>
+        </div>
+      )}
+
+      {/* Add Section Modal */}
+      {showAddSectionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          {/* Modal */}
+          <div 
+            className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl pointer-events-auto"
+          >
+              {/* Header */}
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h2 className="text-[#3E0288] text-2xl font-bold mb-1">Add Section</h2>
+                  <p className="text-gray-600 text-sm">Create a new onboarding section to organize topics, videos, and quizzes.</p>
+                </div>
+                <button
+                  onClick={() => setShowAddSectionModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition p-1"
+                >
+                  <FiX size={24} />
+                </button>
+              </div>
+
+              {/* Section Name Input */}
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-800 mb-2">Section Name</label>
+                <input
+                  type="text"
+                  value={sectionName}
+                  onChange={(e) => setSectionName(e.target.value)}
+                  placeholder="e.g, Employee Benefit"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+                />
+              </div>
+
+              {/* Description Input */}
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-800 mb-2">Description (optional)</label>
+                <textarea
+                  value={sectionDescription}
+                  onChange={(e) => setSectionDescription(e.target.value)}
+                  placeholder="Brief Description of this Training Section"
+                  rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm resize-none"
+                />
+              </div>
+
+              {/* Create Section Button */}
+              <button
+                onClick={handleCreateSection}
+                className="w-full py-3 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-bold"
+              >
+                Create Section
+              </button>
+            </div>
+        </div>
+      )}
+
+      {/* Manage Video Modal */}
+      {showManageVideoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div 
+            className="bg-white rounded-xl p-5 w-full max-w-lg mx-4 shadow-2xl pointer-events-auto"
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-[#3E0288] text-xl font-bold mb-1">Manage Video</h2>
+                <p className="text-gray-600 text-xs">Remove or Replace Video</p>
+              </div>
+              <button
+                onClick={() => setShowManageVideoModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition p-1"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+
+            {/* Video Content Area */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-4">
+                {/* Left Side - Video Icon */}
+                <div className="flex-shrink-0">
+                  <div className="w-16 h-16 border-2 border-[#3E0288] rounded-lg flex items-center justify-center">
+                    <FiVideo className="text-[#3E0288]" size={32} />
+                  </div>
+                </div>
+
+                {/* Right Side - Video Details */}
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-gray-800 mb-1">Mission Statement.mp4</h3>
+                  <p className="text-xs text-gray-500 mb-3">Current Video</p>
+                  <div className="flex gap-2">
+                    <button className="px-3 py-1.5 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition text-xs font-semibold">
+                      Replace Video
+                    </button>
+                    <button className="px-3 py-1.5 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition text-xs font-semibold">
+                      Delete Video
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Save Changes Button */}
+            <button
+              onClick={() => setShowManageVideoModal(false)}
+              className="w-full py-2.5 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-bold"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Quiz Modal */}
+      {showEditQuizModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div 
+            className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl pointer-events-auto"
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h2 className="text-[#3E0288] text-2xl font-bold mb-1">Edit Quiz</h2>
+                <p className="text-gray-600 text-sm">Modify or add quiz content</p>
+              </div>
+              <button
+                onClick={() => setShowEditQuizModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition p-1"
+              >
+                <FiX size={24} />
+              </button>
+            </div>
+
+            {/* Edit Topic */}
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-800 mb-2">Edit Topic</label>
+              <input
+                type="text"
+                defaultValue="Our company story"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+              />
+            </div>
+
+            {/* Question */}
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-800 mb-2">Question 1/5</label>
+              <input
+                type="text"
+                defaultValue="What are the core values of the company?"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+              />
+            </div>
+
+            {/* Answer Options */}
+            <div className="mb-6">
+              <label className="block text-sm font-bold text-gray-800 mb-3">Answer Options</label>
+              <div className="space-y-3">
+                {/* Option 1 - Correct */}
+                <div className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg bg-gray-50">
+                  <input
+                    type="radio"
+                    name="editQuizAnswer"
+                    defaultChecked
+                    className="w-4 h-4 text-[#3E0288] focus:ring-[#3E0288]"
+                  />
+                  <input
+                    type="text"
+                    defaultValue="Innovation, Integrity, Customer Focus"
+                    className="flex-1 px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white"
+                  />
+                  <span className="text-xs text-gray-500">(Correct)</span>
+                </div>
+
+                {/* Option 2 */}
+                <div className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg">
+                  <input
+                    type="radio"
+                    name="editQuizAnswer"
+                    className="w-4 h-4 text-[#3E0288] focus:ring-[#3E0288]"
+                  />
+                  <input
+                    type="text"
+                    defaultValue="Profit, Growth, Market Share"
+                    className="flex-1 px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+                  />
+                </div>
+
+                {/* Option 3 */}
+                <div className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg">
+                  <input
+                    type="radio"
+                    name="editQuizAnswer"
+                    className="w-4 h-4 text-[#3E0288] focus:ring-[#3E0288]"
+                  />
+                  <input
+                    type="text"
+                    defaultValue="Speed, Scale, Efficiency"
+                    className="flex-1 px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Save Changes Button */}
+            <button
+              onClick={() => setShowEditQuizModal(false)}
+              className="w-full py-3 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-bold"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
