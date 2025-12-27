@@ -1,505 +1,248 @@
-import React, { useState, useEffect } from "react";
-import { FiMoreVertical, FiX } from "react-icons/fi";
-import AdminAPI from "../services/api";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { FiMoreVertical, FiSearch, FiFilter, FiChevronDown, FiPlus, FiUpload } from "react-icons/fi";
 
 export default function UserManagement() {
-  const [activeTab, setActiveTab] = useState("admins"); // "admins" or "users"
-  const [admins, setAdmins] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [isSuperadmin, setIsSuperadmin] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const { t } = useTranslation(['users', 'common']);
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
-  const [emailFilter, setEmailFilter] = useState("all"); // "all", "verified", "not_verified"
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  // Sample data matching the image
+  const employees = [
+    { id: 1, name: "Ajay", email: "ajay122@gmail.com", department: "Engeneering", role: "Developer", lastLogin: "1 hour ago", status: "In Progress" },
+    { id: 2, name: "Rahul", email: "rahul@gmail.com", department: "Sales", role: "Acc manager", lastLogin: "2 min ago", status: "Active" },
+    { id: 3, name: "Jeeshan", email: "jeeshanbusi@gmail.com", department: "Marketing", role: "Manager", lastLogin: "October", status: "In Active" },
+    { id: 4, name: "Divekar", email: "divekar123@gmail.com", department: "Operation", role: "Developer", lastLogin: "3 hour ago", status: "In Progress" },
+    { id: 5, name: "Omkar", email: "om123@gmail.com", department: "Sales", role: "Marketing", lastLogin: "Yesterday", status: "Completed" },
+    { id: 6, name: "Ajay", email: "ajay122@gmail.com", department: "Engeneering", role: "Developer", lastLogin: "1 hour ago", status: "In Progress" },
+    { id: 7, name: "Rahul", email: "rahul@gmail.com", department: "Sales", role: "Acc manager", lastLogin: "2 min ago", status: "Active" },
+    { id: 8, name: "Jeeshan", email: "jeeshanbusi@gmail.com", department: "Marketing", role: "Manager", lastLogin: "October", status: "In Active" },
+  ];
+
+  const totalEmployees = 600;
 
   const statusColors = {
-    "Active": "bg-green-100 text-green-800",
-    "In Progress": "bg-yellow-100 text-yellow-800",
-    "In Active": "bg-red-100 text-red-800",
-    "Completed": "bg-purple-100 text-purple-800",
+    "Active": "bg-green-100 text-green-700",
+    "In Progress": "bg-yellow-100 text-yellow-700",
+    "In Active": "bg-red-100 text-red-700",
+    "Completed": "bg-purple-100 text-purple-700",
   };
 
-  // Fetch data on component mount and check user role
-  useEffect(() => {
-    // Check if current user is superadmin
-    const adminData = AdminAPI.getAdminData();
-    const isSuper = adminData && adminData.role === "superadmin";
-    setIsSuperadmin(isSuper);
+  // Filter employees
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = !searchTerm || 
+      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDepartment = !departmentFilter || emp.department === departmentFilter;
+    const matchesRole = !roleFilter || emp.role === roleFilter;
+    const matchesStatus = !statusFilter || emp.status === statusFilter;
     
-    // Set default tab based on role
-    if (!isSuper) {
-      setActiveTab("users"); // Regular admins only see users
-    }
-    
-    // Fetch data based on role
-    fetchUsers();
-    if (isSuper) {
-      fetchAdmins();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return matchesSearch && matchesDepartment && matchesRole && matchesStatus;
+  });
 
-  // Refetch admins when switching to admins tab (for superadmin)
-  useEffect(() => {
-    if (isSuperadmin && activeTab === "admins") {
-      fetchAdmins();
-    }
-  }, [activeTab, isSuperadmin]);
-
-  // Filter users when search term or email filter changes
-  useEffect(() => {
-    if (activeTab === "users") {
-      let filtered = [...users];
-
-      // Apply search filter
-      if (searchTerm) {
-        filtered = filtered.filter(user =>
-          user.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.email?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-      }
-
-      // Apply email verification filter
-      if (emailFilter === "verified") {
-        filtered = filtered.filter(user => user.emailVerified === true);
-      } else if (emailFilter === "not_verified") {
-        filtered = filtered.filter(user => user.emailVerified === false);
-      }
-
-      setFilteredUsers(filtered);
-    }
-  }, [users, searchTerm, emailFilter, activeTab]);
-
-  const fetchAdmins = async () => {
-    // Only fetch admins if user is superadmin
-    if (!isSuperadmin) {
-      setAdmins([]);
-      return;
-    }
-    
-    try {
-      const response = await AdminAPI.getAllAdmins();
-      if (response.success && response.data) {
-        setAdmins(response.data);
-      }
-    } catch (err) {
-      console.error("Error fetching admins:", err);
-      setAdmins([]);
-    }
-  };
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const response = await AdminAPI.getAllUsers();
-      if (response.success && response.data) {
-        setUsers(response.data);
-        setFilteredUsers(response.data); // Initialize filtered users
-      }
-    } catch (err) {
-      console.error("Error fetching users:", err);
-      setError(err.message || "Failed to fetch users");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-    // Clear errors when user starts typing
-    if (error) setError("");
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    setSubmitting(true);
-
-    // Validate form
-    if (!formData.name || !formData.email || !formData.password) {
-      setError("All fields are required");
-      setSubmitting(false);
-      return;
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setError("Please enter a valid email address");
-      setSubmitting(false);
-      return;
-    }
-
-    // Validate password length
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters long");
-      setSubmitting(false);
-      return;
-    }
-
-    try {
-      const response = await AdminAPI.createAdmin(
-        formData.name,
-        formData.email,
-        formData.password
-      );
-
-      if (response.success) {
-        setSuccess("Admin created successfully!");
-        // Reset form
-        setFormData({ name: "", email: "", password: "" });
-        // Close modal after a short delay
-        setTimeout(() => {
-          setShowForm(false);
-          setSuccess("");
-          // Refresh admins list
-          fetchAdmins();
-        }, 1500);
-      }
-    } catch (err) {
-      setError(err.message || "Failed to create admin");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleCloseForm = () => {
-    setShowForm(false);
-    setFormData({ name: "", email: "", password: "" });
-    setError("");
-    setSuccess("");
-  };
+  // Pagination
+  const totalPages = Math.ceil(totalEmployees / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const displayedEmployees = filteredEmployees.slice(startIndex, endIndex);
 
   return (
-    <div className="bg-gray-50 w-full h-screen overflow-hidden flex flex-col">
-      {/* Main Container */}
-      <div className="bg-white rounded-[20px] w-full flex flex-col flex-1 p-6 overflow-hidden">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4 flex-shrink-0">
-          <div className="flex flex-col">
-            <h1 className="text-3xl font-semibold text-[#3E0288]">User Management</h1>
-            <p
-              className="text-[#3E0288] font-normal text-[14px] leading-[36px] mt-1"
-              style={{ fontFamily: "'SF Compact Rounded', sans-serif", letterSpacing: "0%", maxWidth: "420px" }}
-            >
-              Manage your employees, roles, and departments efficiently.
+    <div className="w-full bg-white min-h-screen">
+      {/* Header Section */}
+      <div className="bg-white px-6 py-6 mb-6">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between">
+          <div className="mb-4 md:mb-0">
+            <h1 className="text-[#3E0288] text-3xl font-semibold mb-2" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+              {t('users:title')}
+            </h1>
+            <p className="text-[#3E0288] text-base font-medium opacity-70" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+              {t('users:subtitle')}
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-1 md:mt-0">
-            {isSuperadmin && (
-              <button
-                onClick={() => setShowForm(true)}
-                className="bg-[#3E0288] text-white px-5 py-2 rounded-lg shadow hover:bg-[#2c015e] transition text-sm"
-              >
-                Add Employee
-              </button>
-            )}
-            <button className="border border-[#3E0288] text-[#3E0288] px-5 py-2 rounded-lg hover:bg-[#f5f0ff] transition text-sm">
+          <div className="flex items-center gap-3">
+            {/* Language Selector */}
+            <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+              <span className="text-sm font-semibold">Eng (US)</span>
+              <span className="text-lg">🇺🇸</span>
+              <FiChevronDown className="text-gray-400" size={14} />
+            </div>
+            {/* Profile Picture */}
+            <div className="w-10 h-10 rounded-full bg-[#3E0288] flex items-center justify-center text-white font-semibold">
+              U
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search and Filter Bar */}
+      <div className="px-6 mb-6">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Search Bar */}
+          <div className="relative flex-1 min-w-[250px]">
+            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search by name or email"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
+            />
+          </div>
+
+          {/* Department Filter */}
+          <div className="relative">
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer min-w-[150px]"
+            >
+              <option value="">Department</option>
+              <option value="Engeneering">Engeneering</option>
+              <option value="Sales">Sales</option>
+              <option value="Marketing">Marketing</option>
+              <option value="Operation">Operation</option>
+            </select>
+            <FiFilter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+          </div>
+
+          {/* Role Filter */}
+          <div className="relative">
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer min-w-[150px]"
+            >
+              <option value="">Role</option>
+              <option value="Developer">Developer</option>
+              <option value="Acc manager">Acc manager</option>
+              <option value="Manager">Manager</option>
+              <option value="Marketing">Marketing</option>
+            </select>
+            <FiFilter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+          </div>
+
+          {/* Status Filter */}
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer min-w-[150px]"
+            >
+              <option value="">Check status</option>
+              <option value="Active">Active</option>
+              <option value="In Progress">In Progress</option>
+              <option value="In Active">In Active</option>
+              <option value="Completed">Completed</option>
+            </select>
+            <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 ml-auto">
+            <button className="flex items-center gap-2 px-4 py-2 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-semibold">
+              <FiPlus size={16} />
+              Add Employee
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition text-sm font-semibold">
+              <FiUpload size={16} />
               Upload CSV
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-4 border-b border-gray-200 flex-shrink-0">
-          {isSuperadmin && (
-            <button
-              onClick={() => setActiveTab("admins")}
-              className={`px-4 py-2 font-medium text-sm transition ${
-                activeTab === "admins"
-                  ? "text-[#3E0288] border-b-2 border-[#3E0288]"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Admins ({admins.length})
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab("users")}
-            className={`px-4 py-2 font-medium text-sm transition ${
-              activeTab === "users"
-                ? "text-[#3E0288] border-b-2 border-[#3E0288]"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Learners ({activeTab === "users" ? filteredUsers.length : users.length})
-          </button>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-4 mb-4 flex-shrink-0">
-          <input
-            type="text"
-            placeholder="Search by name or email"
-            className="border border-gray-300 rounded-lg px-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#3E0288] w-[250px] text-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {activeTab === "users" && (
-            <select 
-              className="border border-gray-300 rounded-lg px-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#3E0288] w-[250px] text-sm"
-              value={emailFilter}
-              onChange={(e) => setEmailFilter(e.target.value)}
-            >
-              <option value="all">All Email Status</option>
-              <option value="verified">Verified</option>
-              <option value="not_verified">Not Verified</option>
-            </select>
-          )}
-        </div>
-
-        {/* Table */}
-        <div className="rounded-xl border border-gray-200 bg-white mt-8 flex-1 min-h-0 overflow-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-64 text-gray-500 text-sm">
-              Loading...
-            </div>
-          ) : activeTab === "admins" ? (
-            admins.length === 0 ? (
-              <div className="flex items-center justify-center h-64 text-gray-500 text-sm">
-                No admins found. Click "Add Employee" to create one.
-              </div>
-            ) : (
-              <table className="w-full text-left border-collapse text-[13px]">
-                <thead className="bg-[#f8f6ff] text-gray-500 sticky top-0 z-10">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Name</th>
-                    <th className="px-4 py-3 font-medium">Email</th>
-                    <th className="px-4 py-3 font-medium">Role</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Created At</th>
-                    <th className="px-4 py-3 text-center font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {admins.map((admin) => (
-                    <tr
-                      key={admin.id}
-                      className="hover:bg-[#faf8ff] transition-colors"
-                    >
-                      <td className="px-4 py-3 font-medium text-gray-800">
-                        {admin.fullName}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {admin.email}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                          {admin.role}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                            admin.isActive
-                              ? "bg-green-50 text-green-700"
-                              : "bg-red-50 text-red-700"
-                          }`}
-                        >
-                          {admin.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {new Date(admin.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <FiMoreVertical className="inline-block cursor-pointer text-gray-400 hover:text-[#3E0288] transition" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )
-          ) : filteredUsers.length === 0 ? (
-            <div className="flex items-center justify-center h-64 text-gray-500 text-sm">
-              No users found matching the current filters.
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse text-[13px]">
-              <thead className="bg-[#f8f6ff] text-gray-500 sticky top-0 z-10">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Email Verified</th>
-                  <th className="px-4 py-3 font-medium">Created At</th>
-                  <th className="px-4 py-3 text-center font-medium">Action</th>
+      {/* Employee Table */}
+      <div className="px-6 mb-6">
+        <div className="bg-gray-50 rounded-xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Name</th>
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Email</th>
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Department</th>
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Role</th>
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Last Login</th>
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Status</th>
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredUsers.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="hover:bg-[#faf8ff] transition-colors"
+              <tbody>
+                {displayedEmployees.map((employee) => (
+                  <tr 
+                    key={employee.id} 
+                    className="border-b border-gray-100 hover:bg-white transition cursor-pointer"
+                    onClick={() => navigate(`/users/${employee.id}`)}
                   >
-                    <td className="px-4 py-3 font-medium text-gray-800">
-                      {user.fullName}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {user.email}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                          user.emailVerified
-                            ? "bg-green-50 text-green-700"
-                            : "bg-yellow-50 text-yellow-700"
-                        }`}
-                      >
-                        {user.emailVerified ? "Verified" : "Not Verified"}
+                    <td className="py-4 px-4 text-sm text-gray-700 font-medium">{employee.name}</td>
+                    <td className="py-4 px-4 text-sm text-gray-600">{employee.email}</td>
+                    <td className="py-4 px-4 text-sm text-gray-600">{employee.department}</td>
+                    <td className="py-4 px-4 text-sm text-gray-600">{employee.role}</td>
+                    <td className="py-4 px-4 text-sm text-gray-600">{employee.lastLogin}</td>
+                    <td className="py-4 px-4">
+                      <span className={`inline-block px-3 py-1 text-sm font-semibold rounded-full ${statusColors[employee.status]}`}>
+                        {employee.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <FiMoreVertical className="inline-block cursor-pointer text-gray-400 hover:text-[#3E0288] transition" />
+                    <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        className="text-gray-400 hover:text-[#3E0288] transition"
+                        onClick={() => navigate(`/users/${employee.id}`)}
+                      >
+                        <FiMoreVertical size={18} />
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
-
-        {/* Footer / Pagination */}
-        <div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-3 sm:gap-0 flex-shrink-0">
-          <p className="text-gray-500 text-sm">
-            Showing {activeTab === "admins" ? admins.length : filteredUsers.length} {activeTab === "admins" ? "admin" : "user"}
-            {activeTab === "admins" ? (admins.length !== 1 ? 's' : '') : (filteredUsers.length !== 1 ? 's' : '')}
-          </p>
-          <div className="flex gap-2">
-            {/* Pagination can be added here if needed */}
           </div>
         </div>
       </div>
 
-      {/* Add Admin Sidebar */}
-      {showForm && (
-        <>
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-white bg-opacity-50 z-40"
-            onClick={handleCloseForm}
-          ></div>
-          
-          {/* Right Sidebar */}
-          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
-            {/* Sidebar Header */}
-            <div className="flex justify-between items-center p-6 border-b border-gray-200 bg-white flex-shrink-0">
-              <h2 className="text-2xl font-semibold text-[#3E0288]">Add New Admin</h2>
+      {/* Pagination */}
+      <div className="px-6 mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <p className="text-sm text-gray-600">
+            Showing {displayedEmployees.length} of {totalEmployees} employees
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            {[1, 2, 3].map((page) => (
               <button
-                onClick={handleCloseForm}
-                className="text-gray-500 hover:text-gray-700 transition p-1"
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
+                  currentPage === page
+                    ? "bg-[#3E0288] text-white"
+                    : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+                }`}
               >
-                <FiX className="w-6 h-6" />
+                {page}
               </button>
-            </div>
-
-            {/* Sidebar Body */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 bg-white">
-              {/* Success Message */}
-              {success && (
-                <div className="mb-4 p-3 bg-green-100 text-green-800 rounded-lg text-sm">
-                  {success}
-                </div>
-              )}
-
-              {/* Error Message */}
-              {error && (
-                <div className="mb-4 p-3 bg-red-100 text-red-800 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
-
-              {/* Name Field */}
-              <div className="mb-4">
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288]"
-                  placeholder="Enter full name"
-                />
-              </div>
-
-              {/* Email Field */}
-              <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288]"
-                  placeholder="Enter email address"
-                />
-              </div>
-
-              {/* Password Field */}
-              <div className="mb-6">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                  Password <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  id="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  required
-                  minLength={6}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288]"
-                  placeholder="Enter password (min 6 characters)"
-                />
-                <p className="mt-1 text-xs text-gray-500">Password must be at least 6 characters long</p>
-              </div>
-
-              {/* Form Actions */}
-              <div className="flex gap-3 pt-4 border-t border-gray-200 mt-6">
-                <button
-                  type="button"
-                  onClick={handleCloseForm}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition bg-white"
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-[#3E0288] text-white rounded-lg hover:bg-[#2c015e] transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={submitting}
-                >
-                  {submitting ? "Creating..." : "Create Admin"}
-                </button>
-              </div>
-            </form>
+            ))}
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage >= totalPages}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

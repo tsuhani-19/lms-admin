@@ -1,0 +1,18 @@
+{
+  "title": "ユーザー管理",
+  "subtitle": "従業員、役割、アクセス権限を管理",
+  "addUser": "ユーザーを追加",
+  "searchUsers": "ユーザーを検索...",
+  "name": "名前",
+  "email": "メール",
+  "role": "役割",
+  "department": "部門",
+  "status": "ステータス",
+  "actions": "操作",
+  "view": "表示",
+  "edit": "編集",
+  "deactivate": "無効化",
+  "active": "アクティブ",
+  "inactive": "非アクティブ"
+}
+

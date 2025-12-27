@@ -1,0 +1,17 @@
+{
+  "title": "コンテンツ管理",
+  "subtitle": "オンボーディングセクション、トピック、クイズの問題を管理",
+  "addNewSection": "新しいセクションを追加",
+  "backToContent": "コンテンツに戻る",
+  "sections": "セクション",
+  "topics": "トピック",
+  "addTopic": "トピックを追加",
+  "addVideo": "動画を追加",
+  "addQuiz": "クイズを追加",
+  "manageVideo": "動画を管理",
+  "editQuiz": "クイズを編集",
+  "delete": "削除",
+  "edit": "編集",
+  "save": "保存",
+  "cancel": "キャンセル"
+}

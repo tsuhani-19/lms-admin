@@ -1,0 +1,10 @@
+{
+  "dashboard": "ダッシュボード",
+  "userManagement": "ユーザー管理",
+  "contentManagement": "コンテンツ管理",
+  "profile": "プロフィール",
+  "settings": "設定",
+  "logOut": "ログアウト",
+  "confirmLogout": "ログアウトの確認",
+  "logoutMessage": "ログアウトしてもよろしいですか？"
+}

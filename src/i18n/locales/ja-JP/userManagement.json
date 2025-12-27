@@ -1,0 +1,23 @@
+{
+  "title": "ユーザー管理",
+  "subtitle": "従業員、役割、アクセス権限を管理",
+  "addUser": "ユーザーを追加",
+  "searchUsers": "ユーザーを検索...",
+  "filterByRole": "役割でフィルター",
+  "filterByDepartment": "部門でフィルター",
+  "clearFilters": "フィルターをクリア",
+  "exportData": "データをエクスポート",
+  "name": "名前",
+  "email": "メール",
+  "role": "役割",
+  "department": "部門",
+  "status": "ステータス",
+  "actions": "アクション",
+  "edit": "編集",
+  "delete": "削除",
+  "viewDetails": "詳細を表示",
+  "active": "アクティブ",
+  "inactive": "非アクティブ",
+  "pending": "保留中"
+}
+

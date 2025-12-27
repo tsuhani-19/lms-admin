@@ -1,0 +1,17 @@
+{
+  "title": "Content Management",
+  "subtitle": "Manage onboarding sections, topics, and quiz questions",
+  "addNewSection": "Add New Section",
+  "backToContent": "Back to Content",
+  "sections": "Sections",
+  "topics": "Topics",
+  "addTopic": "Add Topic",
+  "addVideo": "Add Video",
+  "addQuiz": "Add Quiz",
+  "manageVideo": "Manage Video",
+  "editQuiz": "Edit Quiz",
+  "delete": "Delete",
+  "edit": "Edit",
+  "save": "Save",
+  "cancel": "Cancel"
+}

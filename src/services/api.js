@@ -4,44 +4,14 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 
 class AdminAPI {
   /**
-   * Admin login - tries superadmin first, then regular admin
+   * Admin login
    * @param {string} email - Admin email
    * @param {string} password - Admin password
-   * @returns {Promise<Object>} Response with tokens and admin data
+   * @returns {Promise<Object>} Response with user data and token (if email verified) or verification required
    */
   async login(email, password) {
     try {
-      // First try superadmin login (ENV-based)
-      try {
-        const superadminResponse = await fetch(`${API_BASE_URL}/admin/login`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email, password }),
-        });
-
-        const superadminData = await superadminResponse.json();
-
-        if (superadminResponse.ok && superadminData.success) {
-          // Superadmin login successful
-          if (superadminData.accessToken) {
-            localStorage.setItem("adminAccessToken", superadminData.accessToken);
-          }
-          if (superadminData.refreshToken) {
-            localStorage.setItem("adminRefreshToken", superadminData.refreshToken);
-          }
-          if (superadminData.admin) {
-            localStorage.setItem("adminData", JSON.stringify(superadminData.admin));
-          }
-          return superadminData;
-        }
-      } catch (superadminError) {
-        // Superadmin login failed, try regular admin login
-      }
-
-      // Try regular admin login (DB-based)
-      const adminResponse = await fetch(`${API_BASE_URL}/admin/login-db`, {
+      const response = await fetch(`${API_BASE_URL}/user/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -49,26 +19,87 @@ class AdminAPI {
         body: JSON.stringify({ email, password }),
       });
 
-      const adminData = await adminResponse.json();
+      const data = await response.json();
 
-      if (!adminResponse.ok) {
-        throw new Error(adminData.message || "Invalid email or password");
-      }
-
-      // Regular admin login successful
-      if (adminData.accessToken) {
-        localStorage.setItem("adminAccessToken", adminData.accessToken);
-      }
-      if (adminData.refreshToken) {
-        localStorage.setItem("adminRefreshToken", adminData.refreshToken);
-      }
-      if (adminData.admin) {
-        localStorage.setItem("adminData", JSON.stringify(adminData.admin));
+      if (!response.ok) {
+        throw new Error(data.message || "Login failed");
       }
 
-      return adminData;
+      // If login successful and token is provided (email already verified)
+      if (data.success && data.data?.token) {
+        // Store token and user data
+        localStorage.setItem("adminAccessToken", data.data.token);
+        localStorage.setItem("adminData", JSON.stringify(data.data));
+        
+        return {
+          success: true,
+          message: data.message || "Login successful",
+          token: data.data.token,
+          user: data.data,
+          requiresVerification: false,
+        };
+      }
+
+      // If email verification is required
+      return {
+        success: true,
+        message: data.message || "Verification code sent to your email",
+        user: data.data,
+        requiresVerification: true,
+      };
     } catch (error) {
-      throw error;
+      throw new Error(error.message || "Login failed");
+    }
+  }
+
+  /**
+   * Verify login code and complete authentication
+   * @param {string} email - Admin email
+   * @param {string} code - Verification code (6 digits)
+   * @returns {Promise<Object>} Response with token and user data
+   */
+  async verifyLoginCode(email, code) {
+    try {
+      // Validate code format
+      if (!code || code.length !== 6 || !/^\d+$/.test(code)) {
+        throw new Error("Please enter a valid 6-digit verification code");
+      }
+
+      const response = await fetch(`${API_BASE_URL}/user/verify-email-code`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          email_verification_code: code,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Verification failed");
+      }
+
+      // Store token and user data
+      if (data.success && data.data?.token) {
+        localStorage.setItem("adminAccessToken", data.data.token);
+        localStorage.setItem("adminData", JSON.stringify({
+          email: data.data.email,
+        }));
+
+        return {
+          success: true,
+          message: data.message || "Email verified successfully",
+          token: data.data.token,
+          user: data.data,
+        };
+      }
+
+      throw new Error("Invalid response from server");
+    } catch (error) {
+      throw new Error(error.message || "Verification failed");
     }
   }
 
