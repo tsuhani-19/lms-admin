@@ -1,28 +1,42 @@
 import { useState } from "react";
-import { FiFileText, FiSettings, FiMenu, FiX, FiUser } from "react-icons/fi";
+import { FiFileText, FiSettings, FiMenu, FiX, FiUser, FiShield, FiLock, FiMapPin, FiBriefcase } from "react-icons/fi";
 import { AiFillHome } from "react-icons/ai";
 import { FaUser } from "react-icons/fa6";
+import { HiOfficeBuilding } from "react-icons/hi";
 import { useNavigate, useLocation } from "react-router-dom";
 import { BiLogOut } from "react-icons/bi";
 import { useTranslation } from "react-i18next";
 import AdminAPI from "../services/api";
+import { usePermissions } from "../contexts/PermissionsContext";
 import React from "react";
 
 export default function Sidebar() {
   const { t } = useTranslation(['sidebar', 'common']);
+  const { hasPermission } = usePermissions();
   const [open, setOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
 
-  const menuItems = [
-    { name: t("dashboard"), path: "/dashboard", icon: <AiFillHome /> },
-    { name: t("userManagement"), path: "/users", icon: <FaUser /> },
-    { name: t("contentManagement"), path: "/content", icon: <FiFileText /> },
-    { name: t("profile"), path: "/profile", icon: <FiUser /> },
-    { name: t("settings"), path: "/settings", icon: <FiSettings /> },
+  // Define menu items with their required permissions
+  const allMenuItems = [
+    { name: t("dashboard"), path: "/dashboard", icon: <AiFillHome />, permission: null }, // Always visible
+    { name: t("userManagement"), path: "/users", icon: <FaUser />, permission: "user:view" },
+    { name: "Branch Management", path: "/branches", icon: <FiMapPin />, permission: "branch:view" },
+    { name: "Department Management", path: "/departments", icon: <FiBriefcase />, permission: "department:view" },  
+    { name: t("contentManagement"), path: "/content", icon: <FiFileText />, permission: "content:view" },
+    { name: "Admin Management", path: "/admins", icon: <FiShield />, permission: "admin:manage" },
+    { name: "Roles & Permissions", path: "/roles-permissions", icon: <FiLock />, permission: "role:view" },
+    { name: "Company Details", path: "/company-details", icon: <HiOfficeBuilding />, permission: null }, // Always visible
+    { name: t("settings"), path: "/settings", icon: <FiSettings />, permission: null }, // Always visible
   ];
+
+  // Filter menu items based on permissions
+  const menuItems = allMenuItems.filter(item => {
+    if (!item.permission) return true; // No permission required
+    return hasPermission(item.permission);
+  });
 
   const handleLogout = () => {
     setShowLogoutModal(true);

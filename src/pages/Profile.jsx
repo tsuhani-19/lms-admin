@@ -26,6 +26,9 @@ export default function Profile() {
     const [passwordErrors, setPasswordErrors] = useState({});
     const [saveSuccess, setSaveSuccess] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [loadingProfile, setLoadingProfile] = useState(true);
+    const [userData, setUserData] = useState(null);
+    const [error, setError] = useState(null);
     const languageDropdownRef = React.useRef(null);
 
     const languages = [
@@ -39,20 +42,49 @@ export default function Profile() {
     ];
 
     useEffect(() => {
-        // Load user data from localStorage or API
-        const adminData = AdminAPI.getAdminData();
-        const currentLanguage = i18n.language || 'en-US';
-        const currentLangObj = languages.find(lang => lang.code === currentLanguage);
-        
-        if (adminData) {
-            setFullName(adminData.name || adminData.fullName || '');
-            setRole(adminData.role || 'Admin');
-            setLanguagePreference(adminData.languagePreference || (currentLangObj?.name || 'English (US)'));
-            setTwoFactorEnabled(adminData.twoFactorEnabled || false);
-        } else {
-            // Set language preference from i18n
-            setLanguagePreference(currentLangObj?.name || 'English (US)');
-        }
+        // Fetch user profile data from API
+        const fetchUserProfile = async () => {
+            setLoadingProfile(true);
+            setError(null);
+            try {
+                const response = await AdminAPI.getCurrentUser();
+                if (response.success && response.data) {
+                    const data = response.data;
+                    setUserData(data);
+                    setFullName(data.full_name || '');
+                    setRole(data.role?.name || 'Admin');
+                    
+                    // Set language preference
+                    const currentLanguage = i18n.language || 'en-US';
+                    const currentLangObj = languages.find(lang => lang.code === currentLanguage);
+                    if (data.language) {
+                        const langObj = languages.find(lang => lang.code === data.language.code);
+                        setLanguagePreference(langObj?.name || currentLangObj?.name || 'English (US)');
+                    } else {
+                        setLanguagePreference(currentLangObj?.name || 'English (US)');
+                    }
+                    
+                    // Note: 2FA status would come from API if implemented
+                    // For now, keeping the default false
+                    setTwoFactorEnabled(false);
+                } else {
+                    setError(response.message || "Failed to load profile data");
+                }
+            } catch (err) {
+                console.error('Error fetching user profile:', err);
+                setError(err.message || "Failed to load profile data");
+                // Fallback to localStorage if API fails
+                const adminData = AdminAPI.getAdminData();
+                if (adminData) {
+                    setFullName(adminData.name || adminData.fullName || '');
+                    setRole(adminData.role || 'Admin');
+                }
+            } finally {
+                setLoadingProfile(false);
+            }
+        };
+
+        fetchUserProfile();
     }, []);
 
     // Close dropdown when clicking outside
@@ -78,13 +110,20 @@ export default function Profile() {
         }
         setLoading(true);
         try {
-            // TODO: API call to update name
-            // await AdminAPI.updateProfile({ fullName });
-            setIsEditingName(false);
-            setSaveSuccess(true);
-            setTimeout(() => setSaveSuccess(false), 3000);
+            const response = await AdminAPI.updateProfile({ full_name: fullName.trim() });
+            if (response.success && response.data) {
+                // Update local state with new data
+                setUserData(prev => ({ ...prev, ...response.data }));
+                setIsEditingName(false);
+                setSaveSuccess(true);
+                setTimeout(() => setSaveSuccess(false), 3000);
+            } else {
+                console.error('Error updating name:', response.message || 'Failed to update profile');
+            }
         } catch (error) {
             console.error('Error updating name:', error);
+            setError(error.message || 'Failed to update profile');
+            setTimeout(() => setError(null), 5000);
         } finally {
             setLoading(false);
         }
@@ -117,21 +156,26 @@ export default function Profile() {
         setLoading(true);
         setPasswordErrors({});
         try {
-            // TODO: API call to change password
-            // await AdminAPI.changePassword({
-            //     currentPassword: passwordData.currentPassword,
-            //     newPassword: passwordData.newPassword
-            // });
+            const response = await AdminAPI.changePassword(
+                passwordData.currentPassword,
+                passwordData.newPassword,
+                passwordData.confirmPassword
+            );
             
-            setPasswordData({
-                currentPassword: '',
-                newPassword: '',
-                confirmPassword: ''
-            });
-            setShowPasswordForm(false);
-            setSaveSuccess(true);
-            setTimeout(() => setSaveSuccess(false), 3000);
+            if (response.success) {
+                setPasswordData({
+                    currentPassword: '',
+                    newPassword: '',
+                    confirmPassword: ''
+                });
+                setShowPasswordForm(false);
+                setSaveSuccess(true);
+                setTimeout(() => setSaveSuccess(false), 3000);
+            } else {
+                setPasswordErrors({ submit: response.message || t('profile:passwordChangeFailed') });
+            }
         } catch (error) {
+            console.error('Error changing password:', error);
             setPasswordErrors({ submit: error.message || t('profile:passwordChangeFailed') });
         } finally {
             setLoading(false);
@@ -191,6 +235,16 @@ export default function Profile() {
 
     const selectedLanguage = languages.find(lang => lang.name === languagePreference) || languages[0];
 
+    if (loadingProfile) {
+        return (
+            <div className="w-full bg-white min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <p className="text-gray-600 text-lg">Loading profile...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="w-full bg-white min-h-screen">
             {/* Header Section */}
@@ -204,11 +258,18 @@ export default function Profile() {
                             {t('profile:subtitle')}
                         </p>
                     </div>
-                    {saveSuccess && (
-                        <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold">
-                            {t('common:success')}
-                        </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {error && (
+                            <div className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-semibold">
+                                {error}
+                            </div>
+                        )}
+                        {saveSuccess && (
+                            <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold">
+                                {t('common:success')}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -254,8 +315,7 @@ export default function Profile() {
                                             <button
                                                 onClick={() => {
                                                     setIsEditingName(false);
-                                                    const adminData = AdminAPI.getAdminData();
-                                                    setFullName(adminData?.name || adminData?.fullName || '');
+                                                    setFullName(userData?.full_name || '');
                                                 }}
                                                 disabled={loading}
                                                 className="px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-semibold disabled:opacity-50"
@@ -280,17 +340,52 @@ export default function Profile() {
                         </div>
 
                         {/* Role */}
-                        <div className="py-3">
+                        <div className="py-3 border-b border-gray-200">
                             <label className="text-gray-700 font-medium text-sm mb-2 block">
                                 {t('profile:role')}
                             </label>
                             <div className="flex items-center gap-3">
                                 <span className="inline-block px-4 py-2 bg-[#3E0288] text-white text-sm font-semibold rounded-lg">
-                                    {role || 'Admin'}
+                                    {role || userData?.role?.name || 'Admin'}
                                 </span>
-                                <span className="text-gray-600 text-sm">{t('profile:roleAssigned')}</span>
+                                {userData?.role?.description && (
+                                    <span className="text-gray-600 text-sm">{userData.role.description}</span>
+                                )}
+                                {!userData?.role?.description && (
+                                    <span className="text-gray-600 text-sm">{t('profile:roleAssigned')}</span>
+                                )}
                             </div>
                         </div>
+
+                        {/* Email */}
+                        {userData?.email && (
+                            <div className="py-3 border-b border-gray-200">
+                                <label className="text-gray-700 font-medium text-sm mb-2 block">
+                                    Email
+                                </label>
+                                <span className="text-gray-700 text-base">{userData.email}</span>
+                            </div>
+                        )}
+
+                        {/* Branch */}
+                        {userData?.branch && (
+                            <div className="py-3 border-b border-gray-200">
+                                <label className="text-gray-700 font-medium text-sm mb-2 block">
+                                    Branch
+                                </label>
+                                <span className="text-gray-700 text-base">{userData.branch.name}</span>
+                            </div>
+                        )}
+
+                        {/* Department */}
+                        {userData?.department && (
+                            <div className="py-3">
+                                <label className="text-gray-700 font-medium text-sm mb-2 block">
+                                    Department
+                                </label>
+                                <span className="text-gray-700 text-base">{userData.department.name}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -486,53 +581,7 @@ export default function Profile() {
                 </div>
 
                 {/* Two-Factor Authentication Section */}
-                <div className="bg-gray-50 rounded-xl p-6 shadow-sm">
-                    <div className="mb-6">
-                        <h2 className="text-[#3E0288] text-xl font-semibold mb-1 flex items-center gap-2" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-                            <FiShield className="text-[#3E0288]" size={20} />
-                            {t('profile:twoFactorAuth')}
-                        </h2>
-                        <p className="text-gray-600 text-sm">{t('profile:twoFactorDesc')}</p>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between py-3 border-b border-gray-200">
-                            <div className="flex-1">
-                                <p className="text-gray-700 font-medium text-sm mb-1">
-                                    {t('profile:enable2FA')}
-                                </p>
-                                <p className="text-gray-600 text-xs">
-                                    {twoFactorEnabled 
-                                        ? t('profile:twoFactorEnabled')
-                                        : t('profile:twoFactorDisabled')}
-                                </p>
-                            </div>
-                            <ToggleSwitch
-                                checked={twoFactorEnabled}
-                                onChange={handleToggle2FA}
-                                id="two-factor-auth"
-                            />
-                        </div>
-
-                        {twoFactorEnabled && (
-                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                                <p className="text-[#3E0288] text-sm font-semibold mb-2">{t('profile:twoFactorActive')}</p>
-                                <p className="text-gray-700 text-xs">
-                                    {t('profile:twoFactorActiveDesc')}
-                                </p>
-                            </div>
-                        )}
-
-                        {!twoFactorEnabled && (
-                            <div className="bg-gray-100 border border-gray-200 rounded-lg p-4">
-                                <p className="text-gray-700 text-sm font-semibold mb-2">{t('profile:twoFactorInactive')}</p>
-                                <p className="text-gray-600 text-xs">
-                                    {t('profile:twoFactorInactiveDesc')}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                
             </div>
         </div>
     );

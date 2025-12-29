@@ -36,8 +36,15 @@ export default function Login() {
             if (result.requiresVerification) {
                 setShowVerificationCode(true);
             } else {
-                // If login successful with token (email already verified), navigate to dashboard
-                navigate("/dashboard");
+                // If login successful with token (email already verified)
+                if (result.token) {
+                  // Small delay to ensure token is stored
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                  // Navigate to dashboard
+                  navigate("/dashboard");
+                } else {
+                  setError("Login successful but token not received. Please try again.");
+                }
             }
         } catch (err) {
             setError(err.message || t('login:loginFailed'));
@@ -60,10 +67,17 @@ export default function Login() {
             }
 
             // Verify the code
-            await AdminAPI.verifyLoginCode(email, verificationCode);
-
-            // Navigate to dashboard on success
-            navigate("/dashboard");
+            const verifyResult = await AdminAPI.verifyLoginCode(email, verificationCode);
+            
+            // Ensure token is stored before navigating
+            if (verifyResult.token) {
+              // Small delay to ensure token is stored
+              await new Promise(resolve => setTimeout(resolve, 100));
+              // Navigate to dashboard on success
+              navigate("/dashboard");
+            } else {
+              setError("Token not received. Please try again.");
+            }
         } catch (err) {
             setError(err.message || t('login:codeInvalid'));
         } finally {

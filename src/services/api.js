@@ -25,6 +25,16 @@ class AdminAPI {
         throw new Error(data.message || "Login failed");
       }
 
+      // Check if email verification is required (explicit flag or no token)
+      if (data.requires_verification || (!data.data?.token && data.success)) {
+        return {
+          success: true,
+          message: data.message || "Verification code sent to your email",
+          user: data.data,
+          requiresVerification: true,
+        };
+      }
+
       // If login successful and token is provided (email already verified)
       if (data.success && data.data?.token) {
         // Store token and user data
@@ -40,7 +50,7 @@ class AdminAPI {
         };
       }
 
-      // If email verification is required
+      // Fallback: If email verification is required
       return {
         success: true,
         message: data.message || "Verification code sent to your email",
@@ -87,6 +97,7 @@ class AdminAPI {
         localStorage.setItem("adminAccessToken", data.data.token);
         localStorage.setItem("adminData", JSON.stringify({
           email: data.data.email,
+          id: data.data.user?.id || data.data.id,
         }));
 
         return {
@@ -108,7 +119,12 @@ class AdminAPI {
    * @returns {string|null} Access token
    */
   getAccessToken() {
-    return localStorage.getItem("adminAccessToken");
+    try {
+      return localStorage.getItem("adminAccessToken");
+    } catch (error) {
+      console.error("Error accessing localStorage:", error);
+      return null;
+    }
   }
 
   /**
@@ -152,10 +168,15 @@ class AdminAPI {
    * @returns {Promise<Object>} Response data
    */
   async authenticatedRequest(endpoint, options = {}) {
-    const token = this.getAccessToken();
+    let token = this.getAccessToken();
     
     if (!token) {
-      throw new Error("No authentication token found");
+      // Try to get token again after a small delay (in case it was just stored)
+      await new Promise(resolve => setTimeout(resolve, 50));
+      token = this.getAccessToken();
+      if (!token) {
+        throw new Error("No authentication token found. Please login again.");
+      }
     }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -170,10 +191,14 @@ class AdminAPI {
     const data = await response.json();
 
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         // Token expired or invalid, logout
         this.logout();
         throw new Error("Session expired. Please login again.");
+      }
+      if (response.status === 403) {
+        // Permission denied - show the actual error message
+        throw new Error(data.message || "Access forbidden. You don't have the required permission.");
       }
       throw new Error(data.message || "Request failed");
     }
@@ -234,13 +259,63 @@ class AdminAPI {
   }
 
   /**
-   * Get all users (Superadmin only)
+   * Get all users (employees/learners)
    * @returns {Promise<Object>} Response with users list
    */
   async getAllUsers() {
-    return this.authenticatedRequest("/admin/users", {
+    return this.authenticatedRequest("/user/all", {
       method: "GET",
     });
+  }
+
+  /**
+   * Get user details with progress
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} Response with user details and progress data
+   */
+  async getUserDetails(userId) {
+    return this.authenticatedRequest(`/user/${userId}`, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Delete user/employee
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} Response
+   */
+  async deleteUser(userId) {
+    return this.authenticatedRequest(`/user/${userId}`, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * Delete admin
+   * @param {string} adminId - Admin ID
+   * @returns {Promise<Object>} Response
+   */
+  async deleteAdmin(adminId) {
+    return this.authenticatedRequest(`/user/admin/${adminId}`, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * Get all admins (excluding employees)
+   * @returns {Promise<Object>} Response with admins list including role information
+   */
+  async getAllAdminsWithRoles() {
+    try {
+      // First, get all users
+      const usersResponse = await this.authenticatedRequest("/user/all", {
+        method: "GET",
+      });
+      return usersResponse;
+    } catch (error) {
+      // If endpoint doesn't exist, try alternative approach
+      throw new Error(error.message || "Failed to fetch admins");
+    }
   }
 
   /**
@@ -316,7 +391,7 @@ class AdminAPI {
    * @returns {Promise<Object>} Response
    */
   async deleteSection(id) {
-    return this.authenticatedRequest(`/admin/sections/${id}`, {
+    return this.authenticatedRequest(`/section/${id}`, {
       method: "DELETE",
     });
   }
@@ -384,7 +459,7 @@ class AdminAPI {
    * @returns {Promise<Object>} Response
    */
   async deleteTopic(id) {
-    return this.authenticatedRequest(`/admin/topics/${id}`, {
+    return this.authenticatedRequest(`/topic/${id}`, {
       method: "DELETE",
     });
   }
@@ -417,6 +492,410 @@ class AdminAPI {
       // If 404, topic has no quiz
       return null;
     }
+  }
+
+  // ============================================
+  // Roles & Permissions API
+  // ============================================
+
+  /**
+   * Get all roles
+   * @returns {Promise<Object>} Response with roles list
+   */
+  async getAllRoles() {
+    return this.authenticatedRequest("/role/all", {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Create a new role
+   * @param {string} name - Role name
+   * @param {string} description - Role description
+   * @returns {Promise<Object>} Response with created role
+   */
+  async createRole(name, description) {
+    return this.authenticatedRequest("/role/create", {
+      method: "POST",
+      body: JSON.stringify({ name, description }),
+    });
+  }
+
+  /**
+   * Get all permissions
+   * @returns {Promise<Object>} Response with permissions list
+   */
+  async getAllPermissions() {
+    return this.authenticatedRequest("/role/permissions/all", {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Get all role-permission mappings
+   * @returns {Promise<Object>} Response with role-permission mappings
+   */
+  async getAllRolePermissions() {
+    return this.authenticatedRequest("/role/permissions/mappings", {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Get permissions for a specific role
+   * @param {string} roleId - Role ID
+   * @returns {Promise<Object>} Response with role permissions
+   */
+  async getRolePermissions(roleId) {
+    return this.authenticatedRequest(`/role/${roleId}/permissions`, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Add permission to role
+   * @param {string} roleId - Role ID
+   * @param {string} permissionId - Permission ID
+   * @returns {Promise<Object>} Response
+   */
+  async addPermissionToRole(roleId, permissionId) {
+    return this.authenticatedRequest(`/role/${roleId}/permission/${permissionId}`, {
+      method: "POST",
+    });
+  }
+
+  /**
+   * Remove permission from role
+   * @param {string} roleId - Role ID
+   * @param {string} permissionId - Permission ID
+   * @returns {Promise<Object>} Response
+   */
+  async removePermissionFromRole(roleId, permissionId) {
+    return this.authenticatedRequest(`/role/${roleId}/permission/${permissionId}`, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * Create user with role
+   * @param {string} full_name - User's full name
+   * @param {string} email - User's email
+   * @param {string} password - User's password
+   * @param {string} role_id - Role ID to assign
+   * @param {string} branch_id - Branch ID (optional)
+   * @param {string} department_id - Department ID (optional)
+   * @returns {Promise<Object>} Response with created user
+   */
+  async createUserWithRole(full_name, email, password, role_id, branch_id = null, department_id = null) {
+    return this.authenticatedRequest("/user/create", {
+      method: "POST",
+      body: JSON.stringify({ 
+        full_name, 
+        email, 
+        password, 
+        role_id,
+        branch_id: branch_id || null,
+        department_id: department_id || null,
+      }),
+    });
+  }
+
+  /**
+   * Get current user's permissions
+   * @returns {Promise<Object>} Response with user permissions
+   */
+  async getUserPermissions() {
+    return this.authenticatedRequest("/user/permissions", {
+      method: "GET",
+    });
+  }
+
+  // ============================================
+  // Branch API
+  // ============================================
+
+  /**
+   * Get all branches
+   * @returns {Promise<Object>} Response with branches list
+   */
+  async getAllBranches() {
+    return this.authenticatedRequest("/branch/all", {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Create a new branch
+   * @param {string} name - Branch name
+   * @param {string} description - Branch description
+   * @param {string} location - Branch location
+   * @returns {Promise<Object>} Response with created branch
+   */
+  async createBranch(name, description, location) {
+    return this.authenticatedRequest("/branch/create", {
+      method: "POST",
+      body: JSON.stringify({ name, description, location }),
+    });
+  }
+
+  /**
+   * Update a branch
+   * @param {string} branchId - Branch ID
+   * @param {Object} updates - Branch update data
+   * @returns {Promise<Object>} Response with updated branch
+   */
+  async updateBranch(branchId, updates) {
+    return this.authenticatedRequest(`/branch/${branchId}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+  }
+
+  /**
+   * Delete a branch
+   * @param {string} branchId - Branch ID
+   * @returns {Promise<Object>} Response
+   */
+  async deleteBranch(branchId) {
+    return this.authenticatedRequest(`/branch/${branchId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ============================================
+  // Department API
+  // ============================================
+
+  /**
+   * Get all departments
+   * @returns {Promise<Object>} Response with departments list
+   */
+  async getAllDepartments() {
+    return this.authenticatedRequest("/department/all", {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Create a new department
+   * @param {string} name - Department name
+   * @param {string} description - Department description
+   * @param {string} branchId - Branch ID (optional)
+   * @returns {Promise<Object>} Response with created department
+   */
+  async createDepartment(name, description, branchId = null) {
+    return this.authenticatedRequest("/department/create", {
+      method: "POST",
+      body: JSON.stringify({ name, description, branch_id: branchId }),
+    });
+  }
+
+  /**
+   * Update a department
+   * @param {string} departmentId - Department ID
+   * @param {Object} updates - Department update data
+   * @returns {Promise<Object>} Response with updated department
+   */
+  async updateDepartment(departmentId, updates) {
+    return this.authenticatedRequest(`/department/${departmentId}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+  }
+
+  /**
+   * Delete a department
+   * @param {string} departmentId - Department ID
+   * @returns {Promise<Object>} Response
+   */
+  async deleteDepartment(departmentId) {
+    return this.authenticatedRequest(`/department/${departmentId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ============================================
+  // Section API
+  // ============================================
+
+  /**
+   * Get all sections
+   * @returns {Promise<Object>} Response with sections list
+   */
+  async getAllSections() {
+    return this.authenticatedRequest("/section/all", {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Create a new section
+   * @param {string} section_title - Section title
+   * @param {string} section_description - Section description (optional)
+   * @param {string} branch_id - Branch ID (optional)
+   * @param {string} department_id - Department ID (optional)
+   * @returns {Promise<Object>} Response with created section
+   */
+  async createSection(section_title, section_description = null, branch_id = null, department_id = null) {
+    return this.authenticatedRequest("/section/create", {
+      method: "POST",
+      body: JSON.stringify({ 
+        section_title, 
+        section_description, 
+        branch_id, 
+        department_id 
+      }),
+    });
+  }
+
+  // ============================================
+  // Topic API
+  // ============================================
+
+  /**
+   * Get topics by section ID
+   * @param {string} section_id - Section ID
+   * @returns {Promise<Object>} Response with topics list
+   */
+  async getTopicsBySection(section_id) {
+    return this.authenticatedRequest(`/topic/section/${section_id}`, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Create topic with optional quiz
+   * @param {string} topic_title - Topic title
+   * @param {string} topic_description - Topic description (optional)
+   * @param {string} section_id - Section ID
+   * @param {string} video_url - Video URL (optional)
+   * @param {string} subtitle_url - Subtitle URL (optional)
+   * @param {number} video_duration_seconds - Video duration in seconds (optional)
+   * @param {boolean} allow_skip - Allow skip video (optional)
+   * @param {Object} quiz - Quiz data (optional)
+   * @returns {Promise<Object>} Response with created topic
+   */
+  async createTopicWithQuiz(topic_title, topic_description = null, section_id, video_url = null, subtitle_url = null, video_duration_seconds = null, allow_skip = false, quiz = null) {
+    return this.authenticatedRequest("/topic/create", {
+      method: "POST",
+      body: JSON.stringify({ 
+        topic_title, 
+        topic_description, 
+        section_id, 
+        video_url,
+        subtitle_url,
+        video_duration_seconds,
+        allow_skip,
+        quiz 
+      }),
+    });
+  }
+
+  /**
+   * Update topic video
+   * @param {string} topic_id - Topic ID
+   * @param {string} video_url - Video URL (optional)
+   * @param {string} subtitle_url - Subtitle URL (optional)
+   * @param {number} video_duration_seconds - Video duration in seconds (optional)
+   * @param {boolean} allow_skip - Allow skip video (optional)
+   * @returns {Promise<Object>} Response with updated topic
+   */
+  async updateTopicVideo(topic_id, video_url = null, subtitle_url = null, video_duration_seconds = null, allow_skip = false) {
+    return this.authenticatedRequest(`/topic/${topic_id}/video`, {
+      method: "PUT",
+      body: JSON.stringify({ 
+        video_url,
+        subtitle_url,
+        video_duration_seconds,
+        allow_skip
+      }),
+    });
+  }
+
+  /**
+   * Delete topic video
+   * @param {string} topic_id - Topic ID
+   * @returns {Promise<Object>} Response with success message
+   */
+  async deleteTopicVideo(topic_id) {
+    return this.authenticatedRequest(`/topic/${topic_id}/video`, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * Get quiz by topic ID
+   * @param {string} topic_id - Topic ID
+   * @returns {Promise<Object>} Response with quiz data
+   */
+  async getQuizByTopic(topic_id) {
+    return this.authenticatedRequest(`/topic/${topic_id}/quiz`, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Update quiz by topic ID
+   * @param {string} topic_id - Topic ID
+   * @param {Object} quizData - Quiz data (instructions, type, time_limit, passing_required, passing_score, questions)
+   * @returns {Promise<Object>} Response with updated quiz data
+   */
+  async updateQuizByTopic(topic_id, quizData) {
+    return this.authenticatedRequest(`/topic/${topic_id}/quiz`, {
+      method: "PUT",
+      body: JSON.stringify(quizData),
+    });
+  }
+
+  /**
+   * Delete topic
+   * @param {string} topic_id - Topic ID
+   * @returns {Promise<Object>} Response with success message
+   */
+  async deleteTopic(topic_id) {
+    return this.authenticatedRequest(`/topic/${topic_id}`, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * Get current user profile (me)
+   * @returns {Promise<Object>} Response with current user data (full_name, email, role, permissions, branch, department, etc.)
+   */
+  async getCurrentUser() {
+    return this.authenticatedRequest("/user/me", {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Update current user profile
+   * @param {Object} profileData - Profile data to update (e.g., { full_name: "New Name" })
+   * @returns {Promise<Object>} Response with updated user data
+   */
+  async updateProfile(profileData) {
+    return this.authenticatedRequest("/user/me", {
+      method: "PUT",
+      body: JSON.stringify(profileData),
+    });
+  }
+
+  /**
+   * Change user password
+   * @param {string} currentPassword - Current password
+   * @param {string} newPassword - New password
+   * @param {string} confirmPassword - Confirm new password
+   * @returns {Promise<Object>} Response with success message
+   */
+  async changePassword(currentPassword, newPassword, confirmPassword) {
+    return this.authenticatedRequest("/user/change-password", {
+      method: "PUT",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      }),
+    });
   }
 }
 

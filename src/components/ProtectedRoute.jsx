@@ -9,27 +9,22 @@ export default function ProtectedRoute() {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // API integration commented out for UI development
     // Check authentication status
-    // const checkAuth = () => {
-    //   const authStatus = AdminAPI.isAuthenticated();
-    //   setIsAuthenticated(authStatus);
-    //   setIsChecking(false);
-    // };
+    const checkAuth = () => {
+      const authStatus = AdminAPI.isAuthenticated();
+      setIsAuthenticated(authStatus);
+      setIsChecking(false);
+    };
 
-    // checkAuth();
-
-    // Always allow access for UI development
-    setIsAuthenticated(true);
-    setIsChecking(false);
+    checkAuth();
 
     // Optional: Listen for storage changes (e.g., logout from another tab)
-    // const handleStorageChange = () => {
-    //   checkAuth();
-    // };
+    const handleStorageChange = () => {
+      checkAuth();
+    };
 
-    // window.addEventListener("storage", handleStorageChange);
-    // return () => window.removeEventListener("storage", handleStorageChange);
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   if (isChecking) {

@@ -1,41 +1,38 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { FiMoreVertical, FiSearch, FiFilter, FiChevronDown, FiPlus, FiUpload, FiRefreshCw, FiX, FiEye, FiEyeOff, FiTrash2 } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
+import { FiSearch, FiFilter, FiChevronDown, FiRefreshCw, FiPlus, FiX, FiEye, FiEyeOff, FiTrash2 } from "react-icons/fi";
 import AdminAPI from "../services/api";
 import { usePermissions } from "../contexts/PermissionsContext";
 
-export default function UserManagement() {
-  const { t } = useTranslation(['users', 'common']);
+export default function AdminManagement() {
+  const { t } = useTranslation(['common']);
   const { hasPermission, loading: permissionsLoading } = usePermissions();
   const navigate = useNavigate();
-  const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [branches, setBranches] = useState([]);
-  const [roles, setRoles] = useState([]);
+  const [admins, setAdmins] = useState([]);
+  const [filteredAdmins, setFilteredAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState("");
-  const [branchFilter, setBranchFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [roles, setRoles] = useState([]);
   const [newUser, setNewUser] = useState({
     full_name: "",
     email: "",
     password: "",
     confirm_password: "",
     role_id: "",
-    department_id: "",
-    branch_id: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, userId: null, userName: "" });
+  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, adminId: null, adminName: "" });
   const hasFetchedRef = useRef(false);
+
+  // Roles to exclude (employees)
+  const excludedRoles = ['employee'];
 
   // Check permissions and fetch data on component mount
   useEffect(() => {
@@ -46,7 +43,7 @@ export default function UserManagement() {
     if (permissionsLoading) return;
 
     // Check if user has permission to access this page
-    if (!hasPermission("user:view")) {
+    if (!hasPermission("admin:manage")) {
       // Redirect to dashboard if no permission
       navigate("/dashboard", { replace: true });
       return;
@@ -56,49 +53,13 @@ export default function UserManagement() {
     hasFetchedRef.current = true;
 
     // User has permission, fetch data
-    fetchUsers();
-    fetchDepartments();
-    fetchBranches();
+    fetchAdmins();
     fetchRoles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissionsLoading]);
 
-  // Filter users when filters change
-  useEffect(() => {
-    filterUsers();
-  }, [searchTerm, departmentFilter, branchFilter, statusFilter, users]);
-
-  const fetchDepartments = async () => {
-    if (!AdminAPI.isAuthenticated()) {
-      return;
-    }
-
-    try {
-      const response = await AdminAPI.getAllDepartments();
-      if (response.success && response.data) {
-        setDepartments(response.data);
-      }
-    } catch (err) {
-      console.error("Error fetching departments:", err);
-    }
-  };
-
-  const fetchBranches = async () => {
-    if (!AdminAPI.isAuthenticated()) {
-      return;
-    }
-
-    try {
-      const response = await AdminAPI.getAllBranches();
-      if (response.success && response.data) {
-        setBranches(response.data);
-      }
-    } catch (err) {
-      console.error("Error fetching branches:", err);
-    }
-  };
-
   const fetchRoles = async () => {
+    // Check if user is authenticated before fetching
     if (!AdminAPI.isAuthenticated()) {
       return;
     }
@@ -106,18 +67,27 @@ export default function UserManagement() {
     try {
       const response = await AdminAPI.getAllRoles();
       if (response.success && response.data) {
-        // Filter to only show employee role for user management
-        const employeeRole = response.data.filter(role => 
-          role.name?.toLowerCase() === 'employee'
+        // Filter out employee role
+        const adminRoles = response.data.filter(role => 
+          role.name?.toLowerCase() !== 'employee'
         );
-        setRoles(employeeRole);
+        setRoles(adminRoles);
       }
     } catch (err) {
       console.error("Error fetching roles:", err);
+      // Don't show error if it's just authentication issue
+      if (err.message !== "No authentication token found") {
+        setError("Failed to fetch roles. Please refresh the page.");
+      }
     }
   };
 
-  const fetchUsers = async () => {
+  // Filter admins when search term or role filter changes
+  useEffect(() => {
+    filterAdmins();
+  }, [searchTerm, roleFilter, admins]);
+
+  const fetchAdmins = async () => {
     // Check if user is authenticated before fetching
     if (!AdminAPI.isAuthenticated()) {
       setLoading(false);
@@ -128,76 +98,106 @@ export default function UserManagement() {
       setLoading(true);
       setError(null);
       
-      const response = await AdminAPI.getAllUsers();
+      // Try to fetch users - we'll filter on frontend
+      // Note: This assumes there's an endpoint to get all users with roles
+      // If not available, you may need to create a backend endpoint
+      const response = await AdminAPI.authenticatedRequest("/user/admins", {
+        method: "GET",
+      });
 
       if (response.success && response.data) {
-        setUsers(response.data);
+        // Backend already filters out employees, so use data directly
+        setAdmins(response.data);
       } else {
-        setUsers([]);
-        setError(response.message || "Failed to fetch users");
+        // Fallback: Use sample data if API is not available
+        setAdmins(getSampleAdmins());
       }
     } catch (err) {
-      console.error("Error fetching users:", err);
-      setUsers([]);
-      setError(err.message || "Unable to fetch users. Please try again.");
+      console.error("Error fetching admins:", err);
+      // Show the actual error message from backend
+      setError(err.message || "Unable to fetch admins. Please check your permissions.");
+      setAdmins([]); // Don't show sample data on error
     } finally {
       setLoading(false);
     }
   };
 
-  const filterUsers = () => {
-    let filtered = [...users];
+  // Sample data fallback
+  const getSampleAdmins = () => {
+    return [
+      {
+        id: "1",
+        full_name: "John Doe",
+        role: { name: "super_admin", description: "Super Administrator with full system access" }
+      },
+      {
+        id: "2",
+        full_name: "Jane Smith",
+        role: { name: "admin", description: "Administrator with access to all system features" }
+      },
+      {
+        id: "3",
+        full_name: "Mike Johnson",
+        role: { name: "branch_manager", description: "Branch Manager with access to branch operations" }
+      },
+      {
+        id: "4",
+        full_name: "Sarah Williams",
+        role: { name: "department_manager", description: "Department Manager with access to department operations" }
+      },
+      {
+        id: "5",
+        full_name: "David Brown",
+        role: { name: "instructor", description: "Instructor with access to content operations" }
+      },
+      {
+        id: "6",
+        full_name: "Emily Davis",
+        role: { name: "human_resource", description: "Human Resource with access to user operations" }
+      },
+    ];
+  };
+
+  const filterAdmins = () => {
+    let filtered = [...admins];
 
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(user =>
-        user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(admin =>
+        admin.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        admin.role?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        admin.role?.description?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    // Apply department filter
-    if (departmentFilter) {
-      filtered = filtered.filter(user =>
-        user.department?.id === departmentFilter || user.department_id === departmentFilter
+    // Apply role filter
+    if (roleFilter) {
+      filtered = filtered.filter(admin =>
+        admin.role?.name?.toLowerCase() === roleFilter.toLowerCase()
       );
     }
 
-    // Apply branch filter
-    if (branchFilter) {
-      filtered = filtered.filter(user =>
-        user.branch?.id === branchFilter || user.branch_id === branchFilter
-      );
-    }
-
-    // Apply status filter
-    if (statusFilter) {
-      filtered = filtered.filter(user => {
-        if (statusFilter === "Active") return user.status === "active";
-        if (statusFilter === "In Active") return user.status === "inactive";
-        return true;
-      });
-    }
-
-    setFilteredUsers(filtered);
+    setFilteredAdmins(filtered);
     setCurrentPage(1); // Reset to first page when filtering
   };
 
-  // Get unique departments for filter dropdown
-  const uniqueDepartments = departments.filter((dept, index, self) =>
-    index === self.findIndex(d => d.id === dept.id)
-  );
-
-  // Get unique branches for filter dropdown
-  const uniqueBranches = branches.filter((branch, index, self) =>
-    index === self.findIndex(b => b.id === branch.id)
-  );
+  // Get unique roles for filter dropdown
+  const uniqueRoles = [...new Set(admins.map(admin => admin.role?.name).filter(Boolean))];
 
   // Pagination
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredAdmins.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const displayedUsers = filteredUsers.slice(startIndex, endIndex);
+  const displayedAdmins = filteredAdmins.slice(startIndex, endIndex);
+
+  // Format role name for display
+  const formatRoleName = (roleName) => {
+    if (!roleName) return "N/A";
+    return roleName
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
 
   const handleCreateUser = async () => {
     // Check permission
@@ -232,29 +232,13 @@ export default function UserManagement() {
       return;
     }
 
-    // Validate department belongs to selected branch
-    if (newUser.department_id && newUser.branch_id) {
-      const selectedDepartment = departments.find(
-        (dept) => dept.id === newUser.department_id
-      );
-      if (selectedDepartment) {
-        const deptBranchId = selectedDepartment.branch_id || selectedDepartment.branch?.id;
-        if (deptBranchId !== newUser.branch_id) {
-          setError("Selected department does not belong to the selected branch. Please select a department that belongs to the chosen branch.");
-          return;
-        }
-      }
-    }
-
     try {
       setError(null);
       const response = await AdminAPI.createUserWithRole(
         newUser.full_name.trim(),
         newUser.email.trim(),
         newUser.password,
-        newUser.role_id,
-        newUser.branch_id || null,
-        newUser.department_id || null
+        newUser.role_id
       );
 
       if (response.success) {
@@ -265,70 +249,44 @@ export default function UserManagement() {
           password: "",
           confirm_password: "",
           role_id: "",
-          department_id: "",
-          branch_id: "",
         });
         setShowCreateModal(false);
         setError(null);
-        // Refresh users list
-        await fetchUsers();
-      } else {
-        setError(response.message || "Failed to create user");
+        // Refresh admins list
+        fetchAdmins();
       }
     } catch (err) {
       setError(err.message || "Failed to create user");
     }
   };
 
-  const handleDeleteUser = async () => {
-    if (!hasPermission("user:delete")) {
-      setError("You are not authorized to perform this action. You need 'user delete' permission.");
-      setDeleteConfirm({ show: false, userId: null, userName: "" });
+  const handleDeleteAdmin = async () => {
+    if (!hasPermission("admin:manage")) {
+      setError("You are not authorized to perform this action. You need 'admin manage' permission.");
+      setDeleteConfirm({ show: false, adminId: null, adminName: "" });
       return;
     }
 
-    if (!deleteConfirm.userId) return;
+    if (!deleteConfirm.adminId) return;
 
     try {
       setError(null);
-      const response = await AdminAPI.deleteUser(deleteConfirm.userId);
+      const response = await AdminAPI.deleteAdmin(deleteConfirm.adminId);
 
       if (response.success) {
-        // Refresh the users list
-        await fetchUsers();
-        setDeleteConfirm({ show: false, userId: null, userName: "" });
+        // Refresh the admins list
+        await fetchAdmins();
+        setDeleteConfirm({ show: false, adminId: null, adminName: "" });
       }
     } catch (err) {
-      setError(err.message || "Failed to delete user");
-      setDeleteConfirm({ show: false, userId: null, userName: "" });
+      setError(err.message || "Failed to delete admin");
+      setDeleteConfirm({ show: false, adminId: null, adminName: "" });
     }
   };
 
-  // Format last login date
-  const formatLastLogin = (lastLoginAt) => {
-    if (!lastLoginAt) return "Never";
-    const date = new Date(lastLoginAt);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-    return date.toLocaleDateString();
-  };
-
-  const statusColors = {
-    "active": "bg-green-100 text-green-700",
-    "inactive": "bg-red-100 text-red-700",
-  };
-
-  const statusDisplay = {
-    "active": "Active",
-    "inactive": "In Active",
+  const getSelectedRoleDescription = () => {
+    const selectedRole = roles.find(r => r.id === newUser.role_id);
+    return selectedRole?.description || "";
   };
 
   // Show loading while checking permissions
@@ -344,7 +302,7 @@ export default function UserManagement() {
   }
 
   // If user doesn't have permission, don't render the page (will redirect)
-  if (!hasPermission("user:view")) {
+  if (!hasPermission("admin:manage")) {
     return null;
   }
 
@@ -355,27 +313,24 @@ export default function UserManagement() {
         <div className="flex flex-col md:flex-row md:items-start md:justify-between">
           <div className="mb-4 md:mb-0">
             <h1 className="text-[#3E0288] text-3xl font-semibold mb-2" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-              User Management
+              Admin Management
             </h1>
             <p className="text-[#3E0288] text-base font-medium opacity-70" style={{ fontFamily: 'SF Compact Rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-              Manage all employees and learners
+              Manage all administrators, super admins, and staff (excluding employees)
             </p>
           </div>
           <div className="flex items-center gap-3">
             {/* Create User Button - Show to all users with view permission */}
             <button
-              onClick={() => {
-                setShowCreateModal(true);
-                setError(null);
-              }}
+              onClick={() => setShowCreateModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[#3E0288] text-white rounded-lg hover:opacity-90 transition text-sm font-semibold"
             >
               <FiPlus size={16} />
-              Add Employee
+              Create User
             </button>
             {/* Refresh Button */}
             <button
-              onClick={fetchUsers}
+              onClick={fetchAdmins}
               disabled={loading}
               className="flex items-center gap-2 px-4 py-2 border border-[#3E0288] text-[#3E0288] rounded-lg hover:bg-purple-50 transition text-sm font-semibold disabled:opacity-50"
             >
@@ -394,7 +349,7 @@ export default function UserManagement() {
               className="w-10 h-10 rounded-full bg-[#3E0288] flex items-center justify-center text-white font-semibold hover:opacity-90 transition cursor-pointer"
               title="View Profile"
             >
-              U
+              A
             </button>
           </div>
         </div>
@@ -403,11 +358,8 @@ export default function UserManagement() {
       {/* Error Message */}
       {error && (
         <div className="px-6 mb-4">
-          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-yellow-600 hover:text-yellow-800">
-              <FiX size={18} />
-            </button>
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm">
+            {error}
           </div>
         </div>
       )}
@@ -420,59 +372,28 @@ export default function UserManagement() {
             <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Search by name or email"
+              placeholder="Search by name, role, or description"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm"
             />
           </div>
 
-          {/* Department Filter */}
+          {/* Role Filter */}
           <div className="relative">
             <select
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer min-w-[150px]"
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer min-w-[180px]"
             >
-              <option value="">All Departments</option>
-              {uniqueDepartments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name}
+              <option value="">All Roles</option>
+              {uniqueRoles.map((role) => (
+                <option key={role} value={role}>
+                  {formatRoleName(role)}
                 </option>
               ))}
             </select>
             <FiFilter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
-          </div>
-
-          {/* Branch Filter */}
-          <div className="relative">
-            <select
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer min-w-[150px]"
-            >
-              <option value="">All Branches</option>
-              {uniqueBranches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </select>
-            <FiFilter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
-          </div>
-
-          {/* Status Filter */}
-          <div className="relative">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer min-w-[150px]"
-            >
-              <option value="">All Status</option>
-              <option value="Active">Active</option>
-              <option value="In Active">In Active</option>
-            </select>
-            <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
           </div>
         </div>
       </div>
@@ -482,12 +403,12 @@ export default function UserManagement() {
         <div className="px-6 mb-6">
           <div className="text-center py-8 text-gray-500">
             <FiRefreshCw className="animate-spin mx-auto mb-2" size={24} />
-            <p>Loading users...</p>
+            <p>Loading admins...</p>
           </div>
         </div>
       )}
 
-      {/* Users Table */}
+      {/* Admins Table */}
       {!loading && (
         <div className="px-6 mb-6">
           <div className="bg-gray-50 rounded-xl overflow-hidden shadow-sm">
@@ -495,62 +416,54 @@ export default function UserManagement() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">ID</th>
                     <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Name</th>
-                    <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Email</th>
-                    <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Department</th>
-                    <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Branch</th>
-                    <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Last Login</th>
-                    <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Status</th>
+                    <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Role Name</th>
+                    <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Role Description</th>
                     <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayedUsers.length === 0 ? (
+                  {displayedAdmins.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="py-8 px-4 text-center text-gray-500">
-                        No users found
+                      <td colSpan="5" className="py-8 px-4 text-center text-gray-500">
+                        No admins found
                       </td>
                     </tr>
                   ) : (
-                    displayedUsers.map((user) => (
-                      <tr 
-                        key={user.id} 
-                        className="border-b border-gray-100 hover:bg-white transition cursor-pointer"
-                        onClick={() => navigate(`/users/${user.id}`)}
+                    displayedAdmins.map((admin) => (
+                      <tr
+                        key={admin.id}
+                        className="border-b border-gray-100 hover:bg-white transition"
                       >
-                        <td className="py-4 px-4 text-sm text-gray-700 font-medium">{user.full_name || "N/A"}</td>
-                        <td className="py-4 px-4 text-sm text-gray-600">{user.email || "N/A"}</td>
-                        <td className="py-4 px-4 text-sm text-gray-600">{user.department?.name || "No Department"}</td>
-                        <td className="py-4 px-4 text-sm text-gray-600">{user.branch?.name || "No Branch"}</td>
-                        <td className="py-4 px-4 text-sm text-gray-600">{formatLastLogin(user.last_login_at)}</td>
-                        <td className="py-4 px-4">
-                          <span className={`inline-block px-3 py-1 text-sm font-semibold rounded-full ${statusColors[user.status] || statusColors.inactive}`}>
-                            {statusDisplay[user.status] || "In Active"}
+                        <td className="py-4 px-4 text-sm text-gray-700 font-mono">
+                          {admin.id?.substring(0, 8)}...
+                        </td>
+                        <td className="py-4 px-4 text-sm text-gray-700 font-medium">
+                          {admin.full_name || "N/A"}
+                        </td>
+                        <td className="py-4 px-4 text-sm text-gray-600">
+                          <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
+                            {formatRoleName(admin.role?.name)}
                           </span>
                         </td>
+                        <td className="py-4 px-4 text-sm text-gray-600">
+                          {admin.role?.description || "N/A"}
+                        </td>
                         <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-2">
-                            <button 
-                              className="text-gray-400 hover:text-[#3E0288] transition p-1"
-                              onClick={() => navigate(`/users/${user.id}`)}
-                              title="View details"
-                            >
-                              <FiMoreVertical size={18} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (!hasPermission("user:delete")) {
-                                  setError("You are not authorized to perform this action. You need 'user delete' permission.");
-                                  return;
-                                }
-                                setDeleteConfirm({ show: true, userId: user.id, userName: user.full_name || user.email });
-                              }}
-                              className="text-red-500 hover:text-red-700 transition p-1 hover:bg-red-50 rounded"
-                              title="Delete user"
-                            >
-                              <FiTrash2 size={18} />
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => {
+                              if (!hasPermission("admin:manage")) {
+                                setError("You are not authorized to perform this action. You need 'admin manage' permission.");
+                                return;
+                              }
+                              setDeleteConfirm({ show: true, adminId: admin.id, adminName: admin.full_name || admin.email });
+                            }}
+                            className="text-red-500 hover:text-red-700 transition p-2 hover:bg-red-50 rounded-lg"
+                            title="Delete admin"
+                          >
+                            <FiTrash2 size={18} />
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -563,11 +476,11 @@ export default function UserManagement() {
       )}
 
       {/* Pagination */}
-      {!loading && filteredUsers.length > 0 && (
+      {!loading && filteredAdmins.length > 0 && (
         <div className="px-6 mb-6">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-sm text-gray-600">
-              Showing {displayedUsers.length} of {filteredUsers.length} users
+              Showing {displayedAdmins.length} of {filteredAdmins.length} admins
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -618,9 +531,9 @@ export default function UserManagement() {
       {deleteConfirm.show && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
-            <h3 className="text-[#3E0288] text-xl font-semibold mb-4">Delete User</h3>
+            <h3 className="text-[#3E0288] text-xl font-semibold mb-4">Delete Admin</h3>
             <p className="text-gray-700 mb-6">
-              Are you sure you want to delete <strong>{deleteConfirm.userName}</strong>? This action cannot be undone.
+              Are you sure you want to delete <strong>{deleteConfirm.adminName}</strong>? This action cannot be undone.
             </p>
             {error && (
               <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
@@ -630,7 +543,7 @@ export default function UserManagement() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => {
-                  setDeleteConfirm({ show: false, userId: null, userName: "" });
+                  setDeleteConfirm({ show: false, adminId: null, adminName: "" });
                   setError(null);
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
@@ -638,7 +551,7 @@ export default function UserManagement() {
                 Cancel
               </button>
               <button
-                onClick={handleDeleteUser}
+                onClick={handleDeleteAdmin}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
               >
                 Delete
@@ -663,8 +576,6 @@ export default function UserManagement() {
                     password: "",
                     confirm_password: "",
                     role_id: "",
-                    department_id: "",
-                    branch_id: "",
                   });
                   setError(null);
                 }}
@@ -756,57 +667,6 @@ export default function UserManagement() {
                 </div>
               </div>
 
-              {/* Branch Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Branch
-                </label>
-                <select
-                  value={newUser.branch_id}
-                  onChange={(e) => {
-                    // Reset department when branch changes
-                    setNewUser({ ...newUser, branch_id: e.target.value, department_id: "" });
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer"
-                >
-                  <option value="">Select a branch (optional)</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Department Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Department
-                </label>
-                <select
-                  value={newUser.department_id}
-                  onChange={(e) => setNewUser({ ...newUser, department_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer"
-                  disabled={!newUser.branch_id}
-                >
-                  <option value="">
-                    {newUser.branch_id ? "Select a department (optional)" : "Select a branch first"}
-                  </option>
-                  {newUser.branch_id
-                    ? departments
-                        .filter((dept) => dept.branch_id === newUser.branch_id || dept.branch?.id === newUser.branch_id)
-                        .map((dept) => (
-                          <option key={dept.id} value={dept.id}>
-                            {dept.name}
-                          </option>
-                        ))
-                    : null}
-                </select>
-                {newUser.branch_id && departments.filter((dept) => dept.branch_id === newUser.branch_id || dept.branch?.id === newUser.branch_id).length === 0 && (
-                  <p className="mt-1 text-xs text-gray-500">No departments available for this branch</p>
-                )}
-              </div>
-
               {/* Role Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -816,16 +676,23 @@ export default function UserManagement() {
                   value={newUser.role_id}
                   onChange={(e) => setNewUser({ ...newUser, role_id: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3E0288] text-sm bg-white cursor-pointer"
-                  required
                 >
                   <option value="">Select a role</option>
                   {roles.map((role) => (
                     <option key={role.id} value={role.id}>
-                      {role.name}
+                      {formatRoleName(role.name)}
                     </option>
                   ))}
                 </select>
               </div>
+
+              {/* Role Description */}
+              {newUser.role_id && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <p className="text-xs font-medium text-purple-700 mb-1">Role Description:</p>
+                  <p className="text-sm text-purple-600">{getSelectedRoleDescription()}</p>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 mt-6 border-t border-gray-200 pt-4">
@@ -838,8 +705,6 @@ export default function UserManagement() {
                     password: "",
                     confirm_password: "",
                     role_id: "",
-                    department_id: "",
-                    branch_id: "",
                   });
                   setError(null);
                 }}
@@ -860,3 +725,4 @@ export default function UserManagement() {
     </div>
   );
 }
+

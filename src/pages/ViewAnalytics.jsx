@@ -66,9 +66,13 @@ export default function ViewAnalytics() {
                 <FiChevronDown className="text-gray-400" size={14} />
               </div>
               {/* Profile Picture */}
-              <div className="w-10 h-10 rounded-full bg-[#3E0288] flex items-center justify-center text-white font-semibold">
+              <button
+                onClick={() => navigate('/profile')}
+                className="w-10 h-10 rounded-full bg-[#3E0288] flex items-center justify-center text-white font-semibold hover:opacity-90 transition cursor-pointer"
+                title="View Profile"
+              >
                 U
-              </div>
+              </button>
             </div>
             {/* Reports & Export Button */}
             <button 
